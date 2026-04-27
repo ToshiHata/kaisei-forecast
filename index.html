@@ -71,7 +71,7 @@
 
     /* Timeline meter */
     .sat-timeline{padding:14px 16px 10px;background:rgba(0,0,0,0.4)}
-    .timeline-meter{position:relative;height:28px;margin-bottom:6px;cursor:pointer;user-select:none}
+    .timeline-meter{position:relative;height:28px;margin-bottom:6px;cursor:pointer;user-select:none;touch-action:none}
     .timeline-track{position:absolute;top:12px;left:0;right:0;height:4px;background:rgba(255,255,255,0.08);border-radius:2px}
     .timeline-fill{position:absolute;top:12px;left:0;height:4px;background:linear-gradient(90deg,rgba(56,189,248,0.3),var(--sun));border-radius:2px;transition:width 0.1s}
     .timeline-thumb{position:absolute;top:6px;width:16px;height:16px;background:var(--sun);border-radius:50%;transform:translateX(-50%);box-shadow:0 0 8px rgba(245,158,11,0.5);transition:left 0.1s;z-index:2}
@@ -468,9 +468,15 @@
       meter.addEventListener('mousedown', (e) => { dragging = true; seekTo(e); });
       meter.addEventListener('touchstart', (e) => { dragging = true; seekTo(e.touches[0]); }, { passive: true });
       window.addEventListener('mousemove', (e) => { if (dragging) seekTo(e); });
-      window.addEventListener('touchmove', (e) => { if (dragging) seekTo(e.touches[0]); }, { passive: true });
+      function onTimelineTouchMove(e) {
+        if (!dragging) return;
+        e.preventDefault();
+        if (e.touches[0]) seekTo(e.touches[0]);
+      }
+      window.addEventListener('touchmove', onTimelineTouchMove, { passive: false });
       window.addEventListener('mouseup', () => { dragging = false; });
       window.addEventListener('touchend', () => { dragging = false; });
+      window.addEventListener('touchcancel', () => { dragging = false; });
 
       const mapWrap = document.querySelector('.sat-canvas-wrap');
       const pointers = new Map();
