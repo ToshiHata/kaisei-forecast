@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>快晴キープ判定 - 衛星画像アニメーション付き</title>
+  <meta name="description" content="気象衛星ひまわりの赤外画像5時間アニメーションと登山向け快晴判定ツール">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#0a0e1a;--glass:rgba(255,255,255,0.04);--border:rgba(255,255,255,0.08);--text:#f0f4ff;--text2:#8b95b0;--text3:#4b5578;--sun:#f59e0b;--blue:#38bdf8;--green:#34d399;--orange:#f97316;--red:#ef4444;--r-sm:8px;--r-md:12px;--r-lg:16px;--r-xl:24px}
+    body{font-family:'Inter','Noto Sans JP',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+    .bg-anim{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+    .bg-anim::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(ellipse at 30% 20%,rgba(245,158,11,0.06)0%,transparent 50%),radial-gradient(ellipse at 70% 80%,rgba(56,189,248,0.04)0%,transparent 50%);animation:bgF 20s ease-in-out infinite}
+    @keyframes bgF{0%,100%{transform:translate(0,0)}50%{transform:translate(1%,-1%)}}
+    .container{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:20px 16px 60px}
+    .header{text-align:center;padding:24px 0 16px}
+    .header-icon{font-size:44px;margin-bottom:8px;display:inline-block;animation:pulse 3s ease-in-out infinite}
+    @keyframes pulse{0%,100%{transform:scale(1);filter:drop-shadow(0 0 8px rgba(251,191,36,0.4))}50%{transform:scale(1.06);filter:drop-shadow(0 0 16px rgba(251,191,36,0.6))}}
+    .header h1{font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,#f59e0b,#fbbf24,#fde68a);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:4px}
+    .header p{color:var(--text2);font-size:0.8rem;font-weight:300}
+    .loc-bar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+    .loc-bar input{background:var(--glass);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 14px;color:var(--text);font-family:inherit;font-size:0.85rem;width:140px;outline:none;transition:border-color 0.3s}
+    .loc-bar input:focus{border-color:rgba(245,158,11,0.4)}
+    .loc-bar input::placeholder{color:var(--text3)}
+    .btn{padding:10px 18px;border:none;border-radius:var(--r-md);font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;transition:all 0.3s;display:inline-flex;align-items:center;gap:6px}
+    .btn-go{background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#78350f;box-shadow:0 4px 14px rgba(245,158,11,0.3)}
+    .btn-go:hover{transform:translateY(-2px)}
+    .btn-sub{background:var(--glass);color:var(--text2);border:1px solid var(--border)}
+    .btn-sub:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+    .btn:disabled{opacity:0.5;cursor:not-allowed}
+    .error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:var(--r-md);padding:12px 16px;margin-bottom:14px;color:#fca5a5;display:none;align-items:center;gap:8px;font-size:0.82rem}
+    .error.show{display:flex}
+    .loc-name{text-align:center;margin-bottom:14px;font-size:0.8rem;color:var(--text2)}
+    .loc-name .name{color:var(--text);font-weight:600}
+
+    .verdict-box{border-radius:var(--r-xl);padding:24px;margin-bottom:18px;text-align:center;backdrop-filter:blur(20px);border:2px solid var(--border);transition:all 0.5s}
+    .verdict-box.go{background:rgba(52,211,153,0.08);border-color:rgba(52,211,153,0.3)}
+    .verdict-box.caution{background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.3)}
+    .verdict-box.nogo{background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.3)}
+    .verdict-icon{font-size:48px;margin-bottom:8px}
+    .verdict-text{font-size:1.5rem;font-weight:900;margin-bottom:4px}
+    .verdict-box.go .verdict-text{color:var(--green)}
+    .verdict-box.caution .verdict-text{color:var(--sun)}
+    .verdict-box.nogo .verdict-text{color:var(--red)}
+    .verdict-sub{color:var(--text2);font-size:0.8rem;line-height:1.5}
+    .verdict-time{font-size:0.7rem;color:var(--text3);margin-top:8px}
+
+    .risk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:18px}
+    .risk-card{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;position:relative;overflow:hidden}
+    .risk-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:3px;background:var(--bar-color,var(--blue));opacity:0.8}
+    .risk-card .r-title{font-size:0.7rem;color:var(--text2);font-weight:500;margin-bottom:5px}
+    .risk-card .r-value{font-size:1.2rem;font-weight:700;margin-bottom:2px}
+    .risk-card .r-detail{font-size:0.68rem;color:var(--text3);line-height:1.3}
+    .risk-card .r-bar{height:4px;border-radius:2px;background:rgba(255,255,255,0.06);margin-top:6px;overflow:hidden}
+    .risk-card .r-bar-fill{height:100%;border-radius:2px;transition:width 0.6s}
+    .risk-safe{--bar-color:linear-gradient(90deg,#34d399,#6ee7b7)}
+    .risk-warn{--bar-color:linear-gradient(90deg,#f59e0b,#fbbf24)}
+    .risk-danger{--bar-color:linear-gradient(90deg,#ef4444,#f87171)}
+
+    /* Satellite */
+    .sat-section{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:var(--r-xl);padding:24px;margin-bottom:18px}
+    .sat-section h2{font-size:1rem;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+    .sat-desc{font-size:0.73rem;color:var(--text2);margin-bottom:14px;line-height:1.5}
+    .sat-viewer{position:relative;background:#111827;border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border)}
+    .sat-canvas-wrap{position:relative;width:100%;padding-bottom:56.25%;overflow:hidden;touch-action:none;cursor:grab}
+    .sat-canvas-wrap.dragging{cursor:grabbing}
+    .sat-canvas-wrap canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+
+    /* Timeline meter */
+    .sat-timeline{padding:14px 16px 10px;background:rgba(0,0,0,0.4)}
+    .timeline-meter{position:relative;height:28px;margin-bottom:6px;cursor:pointer;user-select:none}
+    .timeline-track{position:absolute;top:12px;left:0;right:0;height:4px;background:rgba(255,255,255,0.08);border-radius:2px}
+    .timeline-fill{position:absolute;top:12px;left:0;height:4px;background:linear-gradient(90deg,rgba(56,189,248,0.3),var(--sun));border-radius:2px;transition:width 0.1s}
+    .timeline-thumb{position:absolute;top:6px;width:16px;height:16px;background:var(--sun);border-radius:50%;transform:translateX(-50%);box-shadow:0 0 8px rgba(245,158,11,0.5);transition:left 0.1s;z-index:2}
+    .timeline-labels{display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text3)}
+    .timeline-labels .current-label{color:var(--sun);font-weight:600}
+    .timeline-ticks{position:absolute;top:10px;left:0;right:0;height:8px;display:flex;justify-content:space-between;pointer-events:none}
+    .timeline-ticks .tick{width:1px;height:100%;background:rgba(255,255,255,0.1)}
+    .timeline-ticks .tick.hour{background:rgba(255,255,255,0.2);height:12px;top:8px}
+    .sat-controls{display:flex;align-items:center;gap:10px;padding:0 16px 12px;flex-wrap:wrap}
+    .sat-controls button{padding:5px 12px;border:1px solid var(--border);border-radius:var(--r-sm);background:rgba(255,255,255,0.06);color:var(--text);font-family:inherit;font-size:0.72rem;cursor:pointer;transition:all 0.2s}
+    .sat-controls button:hover{background:rgba(255,255,255,0.12)}
+    .speed-select{padding:4px 8px;border:1px solid var(--border);border-radius:var(--r-sm);background:rgba(255,255,255,0.06);color:var(--text);font-family:inherit;font-size:0.7rem}
+    .frame-time{font-size:0.78rem;font-weight:600;color:var(--sun);margin-left:auto}
+    .map-hint{font-size:0.66rem;color:var(--text3);width:100%}
+    .sat-loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text2);font-size:0.82rem;display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none}
+    .sat-loading .mini-spin{width:32px;height:32px;border:2px solid rgba(245,158,11,0.2);border-top-color:var(--sun);border-radius:50%;animation:spin 0.8s linear infinite}
+    .sat-progress{font-size:0.7rem;color:var(--text3)}
+    .link-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+    .link-row a{font-size:0.72rem;color:var(--blue);text-decoration:none;padding:5px 12px;border-radius:var(--r-sm);background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.15);transition:all 0.3s}
+    .link-row a:hover{background:rgba(56,189,248,0.15)}
+
+    .strip-section{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:var(--r-xl);padding:20px;margin-bottom:18px}
+    .strip-section h2{font-size:0.95rem;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+    .hour-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    .hour-cell{text-align:center;padding:10px 4px;border-radius:var(--r-md);background:rgba(255,255,255,0.02);border:1px solid var(--border);transition:transform 0.2s}
+    .hour-cell:hover{transform:scale(1.04)}
+    .hour-cell.now{border-color:rgba(245,158,11,0.4);box-shadow:0 0 12px rgba(245,158,11,0.1)}
+    .hour-cell .h-time{font-size:0.68rem;color:var(--text2);font-weight:500;margin-bottom:4px}
+    .hour-cell .h-icon{font-size:1.4rem;margin-bottom:4px}
+    .hour-cell .h-sun{font-size:0.8rem;font-weight:700;margin-bottom:2px}
+    .hour-cell .h-detail{font-size:0.6rem;color:var(--text3);line-height:1.3}
+    .hour-cell.safe .h-sun{color:var(--green)}
+    .hour-cell.warn .h-sun{color:var(--sun)}
+    .hour-cell.bad .h-sun{color:var(--red)}
+
+    .footer{text-align:center;padding:14px;color:var(--text3);font-size:0.66rem}
+    .footer a{color:var(--text2);text-decoration:none}
+    .loading{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,14,26,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;transition:opacity 0.5s}
+    .loading.hidden{opacity:0;pointer-events:none}
+    .spinner{width:44px;height:44px;border:3px solid rgba(245,158,11,0.2);border-top-color:var(--sun);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:14px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .fade-in{animation:fadeIn 0.6s ease-out forwards;opacity:0}
+    @keyframes fadeIn{to{opacity:1}}
+    .d1{animation-delay:.1s}.d2{animation-delay:.2s}.d3{animation-delay:.3s}.d4{animation-delay:.4s}
+    @media(max-width:640px){.container{padding:12px 10px 40px}.header h1{font-size:1.2rem}.verdict-icon{font-size:36px}.verdict-text{font-size:1.1rem}.hour-strip{grid-template-columns:repeat(2,1fr)}.risk-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="bg-anim"></div>
+  <div class="loading" id="loader"><div class="spinner"></div><div style="color:var(--text2);font-size:0.85rem">データを取得中...</div></div>
+  <div class="container">
+    <header class="header">
+      <div class="header-icon">⛰️</div>
+      <h1>快晴キープ判定</h1>
+      <p>衛星画像5時間 + 3時間先予測</p>
+    </header>
+    <div class="loc-bar">
+      <input type="text" id="inLat" placeholder="緯度">
+      <input type="text" id="inLon" placeholder="経度">
+      <button class="btn btn-go" onclick="runAll()">☀️ 判定</button>
+      <button class="btn btn-sub" onclick="geolocate()">📍 現在地</button>
+    </div>
+    <div class="error" id="err"><span>⚠️</span><span id="errText"></span></div>
+    <div id="locName" class="loc-name" style="display:none"></div>
+
+    <div id="result" style="display:none">
+      <div class="verdict-box fade-in d1" id="verdictBox">
+        <div class="verdict-icon" id="verdictIcon"></div>
+        <div class="verdict-text" id="verdictText"></div>
+        <div class="verdict-sub" id="verdictSub"></div>
+        <div class="verdict-time" id="verdictTime"></div>
+      </div>
+      <div class="risk-grid fade-in d2" id="riskGrid"></div>
+
+      <div class="sat-section fade-in d3" id="satSection">
+        <h2>🛰️ 直近5時間の赤外衛星画像</h2>
+        <p class="sat-desc">白い部分＝雲。オレンジの十字があなたの位置。雲が近づいていないか確認してください。</p>
+        <div class="sat-viewer">
+          <div class="sat-canvas-wrap">
+            <canvas id="satCanvas" width="512" height="288"></canvas>
+            <div class="sat-loading" id="satLoading">
+              <div class="mini-spin"></div>
+              <div>衛星画像を読み込み中...</div>
+              <div class="sat-progress" id="satProgress">0 / 30</div>
+            </div>
+          </div>
+          <div class="sat-timeline">
+            <div class="timeline-meter" id="timelineMeter">
+              <div class="timeline-track"></div>
+              <div class="timeline-fill" id="timelineFill"></div>
+              <div class="timeline-ticks" id="timelineTicks"></div>
+              <div class="timeline-thumb" id="timelineThumb"></div>
+            </div>
+            <div class="timeline-labels">
+              <span id="labelStart">-5h</span>
+              <span id="labelQ1">-3h45m</span>
+              <span id="labelMid">-2h30m</span>
+              <span id="labelQ3">-1h15m</span>
+              <span class="current-label" id="labelEnd">現在</span>
+            </div>
+          </div>
+          <div class="sat-controls">
+            <button id="btnPlay" onclick="togglePlay()">▶ 再生</button>
+            <button id="btnResetMap" onclick="resetMapView()">表示リセット</button>
+            <select class="speed-select" id="speedSelect" onchange="changeSpeed()">
+              <option value="800">遅い</option>
+              <option value="400" selected>普通</option>
+              <option value="200">速い</option>
+            </select>
+            <span class="frame-time" id="frameTime">--</span>
+            <span class="map-hint">地図操作: ホイール/ピンチで拡大縮小、ドラッグで移動</span>
+          </div>
+        </div>
+        <div class="link-row">
+          <a href="https://himawari.asia" target="_blank" rel="noopener">🌏 ひまわり全画面</a>
+          <a href="https://www.jma.go.jp/bosai/map.html#contents=himawari" target="_blank" rel="noopener">🏛️ 気象庁</a>
+          <a href="https://weathernews.jp/onebox/satellite/" target="_blank" rel="noopener">📺 ウェザーニュース</a>
+        </div>
+      </div>
+
+      <div class="strip-section fade-in d4">
+        <h2>🕐 今後3時間（モデル予報・参考）</h2>
+        <div class="hour-strip" id="hourStrip"></div>
+      </div>
+    </div>
+    <footer class="footer">
+      <p>衛星画像: <a href="https://www.jma.go.jp/" target="_blank">気象庁</a> ひまわり | 予報: <a href="https://open-meteo.com/" target="_blank">Open-Meteo API</a></p>
+      <p style="margin-top:3px">⚠️ モデル予報は参考値です。衛星画像での目視確認を推奨</p>
+    </footer>
+  </div>
+
+  <script>
+    // ── Satellite Config ──
+    const SAT_BASE = 'https://www.jma.go.jp/bosai/himawari/data/satimg';
+    const TIMES_URL = `${SAT_BASE}/targetTimes_fd.json`;
+    const ZOOM = 5;
+    const BAND = 'B13', PROD = 'TBB';
+    // Zoom 5: x=27: 123.75-135°, x=28: 135°-146.25°
+    // y=12: ~41°N to ~32°N, y=13: ~32°N to ~22°N
+    const TILES = [
+      { x: 27, y: 12 }, { x: 28, y: 12 },
+      { x: 27, y: 13 }, { x: 28, y: 13 },
+    ];
+    const TILE_SZ = 256;
+    const COLS = 2, ROWS = 2;
+    const TILE_X_MIN = 27, TILE_Y_MIN = 12;
+    const FRAME_COUNT = 30; // 5 hours × 6 per hour
+    // Kyoto 35°N → tileY=12.67 → pixel 172 in tile row.
+    // Canvas 288px, center=144. Offset = 144-172 = -28
+    const Y_OFFSET = -28;
+
+    let satFrames = [], satPlaying = false, satFrameIdx = 0, satInterval = null, satSpeed = 400;
+    const MAP_MIN_SCALE = 1;
+    const MAP_MAX_SCALE = 6;
+    const mapView = { scale: 1, offsetX: 0, offsetY: 0 };
+
+    function latLonToPixel(lat, lon) {
+      const tilesPerSide = Math.pow(2, ZOOM);
+      const tileXf = ((lon + 180) / 360) * tilesPerSide;
+      const latRad = lat * Math.PI / 180;
+      const tileYf = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * tilesPerSide;
+      const scale = 512 / (COLS * TILE_SZ);
+      return {
+        x: (tileXf - TILE_X_MIN) * TILE_SZ * scale,
+        y: (tileYf - TILE_Y_MIN) * TILE_SZ * scale + Y_OFFSET,
+      };
+    }
+
+    function clampMapView() {
+      const canvas = document.getElementById('satCanvas');
+      const tileScale = canvas.width / (COLS * TILE_SZ);
+      const content = {
+        left: 0,
+        top: Y_OFFSET,
+        right: COLS * TILE_SZ * tileScale,
+        bottom: Y_OFFSET + ROWS * TILE_SZ * tileScale,
+      };
+      const minX = canvas.width - content.right * mapView.scale;
+      const maxX = -content.left * mapView.scale;
+      const minY = canvas.height - content.bottom * mapView.scale;
+      const maxY = -content.top * mapView.scale;
+      mapView.offsetX = Math.min(maxX, Math.max(minX, mapView.offsetX));
+      mapView.offsetY = Math.min(maxY, Math.max(minY, mapView.offsetY));
+    }
+
+    function zoomMapAt(point, nextScale) {
+      const oldScale = mapView.scale;
+      nextScale = Math.max(MAP_MIN_SCALE, Math.min(MAP_MAX_SCALE, nextScale));
+      if (nextScale === oldScale) return;
+
+      mapView.offsetX = point.x - ((point.x - mapView.offsetX) * nextScale / oldScale);
+      mapView.offsetY = point.y - ((point.y - mapView.offsetY) * nextScale / oldScale);
+      mapView.scale = nextScale;
+      clampMapView();
+      drawFrame();
+    }
+
+    function panMapBy(dx, dy) {
+      mapView.offsetX += dx;
+      mapView.offsetY += dy;
+      clampMapView();
+      drawFrame();
+    }
+
+    function resetMapView() {
+      mapView.scale = 1;
+      mapView.offsetX = 0;
+      mapView.offsetY = 0;
+      drawFrame();
+    }
+
+    function canvasPointFromEvent(e) {
+      const canvas = document.getElementById('satCanvas');
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) * canvas.width / rect.width,
+        y: (e.clientY - rect.top) * canvas.height / rect.height,
+      };
+    }
+
+    async function loadSatelliteAnimation() {
+      const loadEl = document.getElementById('satLoading');
+      const progEl = document.getElementById('satProgress');
+      loadEl.style.display = 'flex';
+
+      try {
+        const timesRes = await fetch(TIMES_URL);
+        if (!timesRes.ok) throw new Error('時刻リスト取得失敗');
+        const allTimes = await timesRes.json();
+        const recent = allTimes.slice(-FRAME_COUNT);
+        let loaded = 0;
+        satFrames = [];
+
+        for (const entry of recent) {
+          const bt = entry.basetime, vt = entry.validtime;
+          const tilePromises = TILES.map(t => new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve({ x: t.x, y: t.y, img });
+            img.onerror = () => resolve({ x: t.x, y: t.y, img: null });
+            img.src = `${SAT_BASE}/${bt}/fd/${vt}/${BAND}/${PROD}/${ZOOM}/${t.x}/${t.y}.jpg`;
+          }));
+          const tiles = await Promise.all(tilePromises);
+          satFrames.push({ basetime: bt, tiles });
+          loaded++;
+          progEl.textContent = `${loaded} / ${FRAME_COUNT}`;
+        }
+
+        loadEl.style.display = 'none';
+
+        // Build timeline ticks and labels
+        buildTimelineLabels();
+
+        satFrameIdx = satFrames.length - 1;
+        drawFrame();
+      } catch (e) {
+        loadEl.innerHTML = `<div style="color:#fca5a5">⚠️ 衛星画像の読み込みに失敗</div><div class="sat-progress">${e.message}</div>`;
+      }
+    }
+
+    function buildTimelineLabels() {
+      if (!satFrames.length) return;
+      const first = satFrames[0].basetime;
+      const last = satFrames[satFrames.length - 1].basetime;
+
+      const toJST = (bt) => {
+        const utcH = parseInt(bt.slice(8, 10));
+        const m = bt.slice(10, 12);
+        const jstH = (utcH + 9) % 24;
+        return `${String(jstH).padStart(2, '0')}:${m}`;
+      };
+
+      document.getElementById('labelStart').textContent = toJST(first);
+      document.getElementById('labelEnd').textContent = toJST(last) + ' (最新)';
+
+      const q1 = satFrames[Math.floor(satFrames.length * 0.25)]?.basetime;
+      const mid = satFrames[Math.floor(satFrames.length * 0.5)]?.basetime;
+      const q3 = satFrames[Math.floor(satFrames.length * 0.75)]?.basetime;
+      if (q1) document.getElementById('labelQ1').textContent = toJST(q1);
+      if (mid) document.getElementById('labelMid').textContent = toJST(mid);
+      if (q3) document.getElementById('labelQ3').textContent = toJST(q3);
+
+      // Build ticks
+      const tickContainer = document.getElementById('timelineTicks');
+      tickContainer.innerHTML = '';
+      for (let i = 0; i < satFrames.length; i++) {
+        const tick = document.createElement('div');
+        tick.className = 'tick' + (i % 6 === 0 ? ' hour' : '');
+        tickContainer.appendChild(tick);
+      }
+    }
+
+    function updateTimelineMeter() {
+      if (!satFrames.length) return;
+      const pct = (satFrameIdx / (satFrames.length - 1)) * 100;
+      document.getElementById('timelineFill').style.width = pct + '%';
+      document.getElementById('timelineThumb').style.left = pct + '%';
+
+      const bt = satFrames[satFrameIdx].basetime;
+      const utcH = parseInt(bt.slice(8, 10));
+      const m = bt.slice(10, 12);
+      const jstH = (utcH + 9) % 24;
+      const dateStr = `${bt.slice(4,6)}/${bt.slice(6,8)}`;
+      document.getElementById('frameTime').textContent = `${dateStr} ${String(jstH).padStart(2,'0')}:${m} JST`;
+    }
+
+    function drawFrame() {
+      if (!satFrames.length) return;
+      const frame = satFrames[satFrameIdx];
+      const canvas = document.getElementById('satCanvas');
+      const ctx = canvas.getContext('2d');
+      const scale = canvas.width / (COLS * TILE_SZ);
+
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.translate(mapView.offsetX, mapView.offsetY);
+      ctx.scale(mapView.scale, mapView.scale);
+
+      // Draw tiles (2 rows, shifted so Kyoto is vertically centered)
+      for (const t of frame.tiles) {
+        if (!t.img) continue;
+        const col = t.x - TILE_X_MIN;
+        const row = t.y - TILE_Y_MIN;
+        ctx.drawImage(t.img, col * TILE_SZ * scale, row * TILE_SZ * scale + Y_OFFSET, TILE_SZ * scale, TILE_SZ * scale);
+      }
+      ctx.restore();
+
+      // User position crosshair
+      const lat = parseFloat(document.getElementById('inLat').value);
+      const lon = parseFloat(document.getElementById('inLon').value);
+      if (!isNaN(lat) && !isNaN(lon)) {
+        const pos = latLonToPixel(lat, lon);
+        const screenPos = {
+          x: pos.x * mapView.scale + mapView.offsetX,
+          y: pos.y * mapView.scale + mapView.offsetY,
+        };
+        if (screenPos.x >= 0 && screenPos.x <= canvas.width && screenPos.y >= 0 && screenPos.y <= canvas.height) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(245, 158, 11, 0.9)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(screenPos.x - 10, screenPos.y); ctx.lineTo(screenPos.x - 3, screenPos.y);
+          ctx.moveTo(screenPos.x + 3, screenPos.y); ctx.lineTo(screenPos.x + 10, screenPos.y);
+          ctx.moveTo(screenPos.x, screenPos.y - 10); ctx.lineTo(screenPos.x, screenPos.y - 3);
+          ctx.moveTo(screenPos.x, screenPos.y + 3); ctx.lineTo(screenPos.x, screenPos.y + 10);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(screenPos.x, screenPos.y, 14, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(245, 158, 11, 0.4)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      updateTimelineMeter();
+    }
+
+    function startAnimation() {
+      if (satInterval) clearInterval(satInterval);
+      satInterval = setInterval(() => {
+        satFrameIdx = (satFrameIdx + 1) % satFrames.length;
+        drawFrame();
+      }, satSpeed);
+    }
+
+    function togglePlay() {
+      satPlaying = !satPlaying;
+      document.getElementById('btnPlay').textContent = satPlaying ? '⏸ 一時停止' : '▶ 再生';
+      if (satPlaying) startAnimation();
+      else { if (satInterval) { clearInterval(satInterval); satInterval = null; } }
+    }
+
+    function changeSpeed() {
+      satSpeed = parseInt(document.getElementById('speedSelect').value);
+      if (satPlaying) startAnimation();
+    }
+
+    // Timeline click-to-seek
+    document.addEventListener('DOMContentLoaded', () => {
+      const meter = document.getElementById('timelineMeter');
+      let dragging = false;
+
+      function seekTo(e) {
+        if (!satFrames.length) return;
+        const rect = meter.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        satFrameIdx = Math.round(pct * (satFrames.length - 1));
+        drawFrame();
+      }
+
+      meter.addEventListener('mousedown', (e) => { dragging = true; seekTo(e); });
+      meter.addEventListener('touchstart', (e) => { dragging = true; seekTo(e.touches[0]); }, { passive: true });
+      window.addEventListener('mousemove', (e) => { if (dragging) seekTo(e); });
+      window.addEventListener('touchmove', (e) => { if (dragging) seekTo(e.touches[0]); }, { passive: true });
+      window.addEventListener('mouseup', () => { dragging = false; });
+      window.addEventListener('touchend', () => { dragging = false; });
+
+      const mapWrap = document.querySelector('.sat-canvas-wrap');
+      const pointers = new Map();
+      let lastPanPoint = null;
+      let lastPinchDistance = 0;
+
+      function pointerDistance() {
+        const pts = Array.from(pointers.values());
+        if (pts.length < 2) return 0;
+        return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      }
+
+      function pointerCenter() {
+        const pts = Array.from(pointers.values());
+        return {
+          x: (pts[0].x + pts[1].x) / 2,
+          y: (pts[0].y + pts[1].y) / 2,
+        };
+      }
+
+      mapWrap.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+        zoomMapAt(canvasPointFromEvent(e), mapView.scale * zoomFactor);
+      }, { passive: false });
+
+      mapWrap.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        pointers.set(e.pointerId, canvasPointFromEvent(e));
+        mapWrap.setPointerCapture(e.pointerId);
+        mapWrap.classList.add('dragging');
+        lastPanPoint = pointers.size === 1 ? canvasPointFromEvent(e) : null;
+        lastPinchDistance = pointers.size === 2 ? pointerDistance() : 0;
+      });
+
+      mapWrap.addEventListener('pointermove', (e) => {
+        if (!pointers.has(e.pointerId)) return;
+        const point = canvasPointFromEvent(e);
+        pointers.set(e.pointerId, point);
+
+        if (pointers.size === 2) {
+          const distance = pointerDistance();
+          if (lastPinchDistance > 0) {
+            zoomMapAt(pointerCenter(), mapView.scale * distance / lastPinchDistance);
+          }
+          lastPinchDistance = distance;
+          lastPanPoint = null;
+          return;
+        }
+
+        if (lastPanPoint) {
+          panMapBy(point.x - lastPanPoint.x, point.y - lastPanPoint.y);
+        }
+        lastPanPoint = point;
+      });
+
+      function endPointer(e) {
+        pointers.delete(e.pointerId);
+        lastPinchDistance = pointers.size === 2 ? pointerDistance() : 0;
+        lastPanPoint = pointers.size === 1 ? Array.from(pointers.values())[0] : null;
+        if (pointers.size === 0) mapWrap.classList.remove('dragging');
+      }
+
+      mapWrap.addEventListener('pointerup', endPointer);
+      mapWrap.addEventListener('pointercancel', endPointer);
+    });
+
+    // Auto refresh
+    setInterval(() => { loadSatelliteAnimation(); }, 10 * 60 * 1000);
+
+    // ── Geolocation ──
+    function geolocate() {
+      if (!navigator.geolocation) return;
+      const btn = document.querySelector('.btn-sub');
+      btn.disabled = true; btn.textContent = '⏳';
+      navigator.geolocation.getCurrentPosition(
+        p => { document.getElementById('inLat').value = p.coords.latitude.toFixed(4); document.getElementById('inLon').value = p.coords.longitude.toFixed(4); btn.disabled = false; btn.innerHTML = '📍 現在地'; runAll(); },
+        () => { btn.disabled = false; btn.innerHTML = '📍 現在地'; showErr('位置情報を取得できません'); },
+        { timeout: 10000 }
+      );
+    }
+    function showErr(m) { document.getElementById('errText').textContent = m; document.getElementById('err').classList.add('show'); }
+    function hideErr() { document.getElementById('err').classList.remove('show'); }
+    function showLoad(on) { document.getElementById('loader').classList.toggle('hidden', !on); }
+    showLoad(false);
+
+    // ── Main ──
+    function fetchWithTimeout(url, timeoutMs = 10000) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
+    }
+
+    async function runAll() {
+      const lat = parseFloat(document.getElementById('inLat').value);
+      const lon = parseFloat(document.getElementById('inLon').value);
+      if (isNaN(lat) || isNaN(lon)) { showErr('緯度と経度を入力してください'); return; }
+      hideErr(); showLoad(true);
+
+      // Always show result container and load satellite (independent of API)
+      document.getElementById('result').style.display = '';
+      geocode(lat, lon);
+      loadSatelliteAnimation();
+
+      // Try forecast API separately — if it fails, satellite still works
+      try {
+        const params = new URLSearchParams({
+          latitude: lat.toFixed(4), longitude: lon.toFixed(4),
+          hourly: 'sunshine_duration,direct_radiation,temperature_2m,relative_humidity_2m,dew_point_2m,is_day,relative_humidity_925hPa',
+          timezone: 'Asia/Tokyo', forecast_days: '2',
+        });
+        const res = await fetchWithTimeout(`https://api.open-meteo.com/v1/forecast?${params}`);
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const data = await res.json();
+        analyze(data);
+      } catch(e) {
+        // Show warning but don't block satellite view
+        showErr('予報データ取得失敗（衛星画像は表示中）: ' + (e.name === 'AbortError' ? 'タイムアウト' : e.message));
+        // Hide forecast-only UI
+        document.getElementById('verdictBox').style.display = 'none';
+        document.getElementById('riskGrid').style.display = 'none';
+        document.querySelector('.strip-section').style.display = 'none';
+      }
+      finally { showLoad(false); }
+    }
+
+    async function geocode(lat, lon) {
+      const el = document.getElementById('locName');
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ja`);
+        const d = await r.json(); const a = d.address;
+        const n = [a.city||a.town||a.village||'', a.state||a.province||''].filter(Boolean).join(', ');
+        el.innerHTML = `<span class="name">📍 ${n||d.display_name}</span>`;
+      } catch { el.innerHTML = ''; }
+      el.style.display = '';
+    }
+
+    function analyze(apiData) {
+      const h = apiData.hourly;
+      const now = new Date();
+      const nowHour = now.getHours();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      let startIdx = -1;
+      for (let i = 0; i < h.time.length; i++) {
+        if (h.time[i] === `${todayStr}T${String(nowHour).padStart(2,'0')}:00`) { startIdx = i; break; }
+      }
+      if (startIdx < 0) { showErr('データが見つかりません'); return; }
+
+      const hours = [];
+      for (let i = 0; i < 4 && (startIdx + i) < h.time.length; i++) {
+        const idx = startIdx + i;
+        const sunDur = h.sunshine_duration[idx] || 0;
+        hours.push({
+          hour: parseInt(h.time[idx].slice(11,13), 10),
+          sunshine_pct: Math.round((sunDur / 3600) * 100),
+          direct_rad: h.direct_radiation[idx] || 0,
+          temp: h.temperature_2m[idx],
+          rh: h.relative_humidity_2m[idx],
+          dewpoint: h.dew_point_2m[idx],
+          is_day: h.is_day[idx],
+          rh_925: h.relative_humidity_925hPa[idx],
+        });
+      }
+
+      const current = hours[0], future = hours.slice(1);
+      const maxRH925 = Math.max(...hours.map(h => h.rh_925));
+      const minSpread = Math.min(...hours.map(h => h.temp - h.dewpoint));
+      const sunMin = Math.min(...hours.map(h => h.sunshine_pct));
+      const rh925Rising = future.length > 0 && Math.max(...future.map(h => h.rh_925)) > current.rh_925 + 10;
+      const sunDropping = future.length > 0 && future[future.length - 1].sunshine_pct < current.sunshine_pct - 20;
+
+      let riskScore = 0;
+      if (maxRH925 > 85) riskScore += 35; else if (maxRH925 > 70) riskScore += 20; else if (maxRH925 > 55) riskScore += 8;
+      if (minSpread < 2) riskScore += 30; else if (minSpread < 5) riskScore += 15; else if (minSpread < 8) riskScore += 5;
+      if (sunMin < 30) riskScore += 25; else if (sunMin < 60) riskScore += 12; else if (sunMin < 80) riskScore += 5;
+      if (sunDropping) riskScore += 10;
+      if (rh925Rising) riskScore += 10;
+
+      const allNight = hours.every(h => !h.is_day);
+      let verdict, vIcon, vText, vSub;
+      if (allNight) { verdict='caution';vIcon='🌙';vText='夜間のため判定不可';vSub='日中に再度ご確認ください'; }
+      else if (riskScore<=20) { verdict='go';vIcon='☀️';vText='GO！快晴キープ';vSub='3時間後も晴れが続く見込み。衛星画像も確認を。'; }
+      else if (riskScore<=45) { verdict='caution';vIcon='⛅';vText='注意 — 曇りリスクあり';vSub='衛星画像で雲の接近を確認してください。'; }
+      else { verdict='nogo';vIcon='☁️';vText='STOP — 曇りの可能性大';vSub='出発は見送り推奨。衛星画像でも確認を。'; }
+
+      const vbox = document.getElementById('verdictBox');
+      vbox.className = `verdict-box fade-in d1 ${verdict}`;
+      document.getElementById('verdictIcon').textContent = vIcon;
+      document.getElementById('verdictText').textContent = vText;
+      document.getElementById('verdictSub').textContent = vSub;
+      document.getElementById('verdictTime').textContent = `判定: ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')} | リスクスコア ${riskScore}/100`;
+
+      const rh925Cls=maxRH925>80?'risk-danger':maxRH925>65?'risk-warn':'risk-safe';
+      const spCls=minSpread<3?'risk-danger':minSpread<6?'risk-warn':'risk-safe';
+      const snCls=sunMin>=80?'risk-safe':sunMin>=50?'risk-warn':'risk-danger';
+      const maxRH=Math.max(...hours.map(h=>h.rh));
+      document.getElementById('riskGrid').innerHTML = `
+        <div class="risk-card ${rh925Cls}"><div class="r-title">🏔️ 上空湿度 (925hPa)</div><div class="r-value">${Math.round(maxRH925)}%</div><div class="r-detail">${maxRH925>80?'雲が出やすい':maxRH925>65?'やや湿り気味':'乾燥 — 安全'}</div><div class="r-bar"><div class="r-bar-fill" style="width:${Math.min(maxRH925,100)}%;background:${maxRH925>80?'var(--red)':maxRH925>65?'var(--sun)':'var(--green)'}"></div></div></div>
+        <div class="risk-card ${spCls}"><div class="r-title">🌡️ 気温−露点差</div><div class="r-value">${minSpread.toFixed(1)}°C</div><div class="r-detail">${minSpread<3?'霧/雲の危険':minSpread<6?'注意が必要':'十分な差 — 安全'}</div><div class="r-bar"><div class="r-bar-fill" style="width:${Math.max(0,Math.min(100,100-(minSpread/15)*100))}%;background:${minSpread<3?'var(--red)':minSpread<6?'var(--sun)':'var(--green)'}"></div></div></div>
+        <div class="risk-card ${snCls}"><div class="r-title">☀️ 最低日照率</div><div class="r-value">${sunMin}%</div><div class="r-detail">${sunMin>=80?'日照十分':sunMin>=50?'雲増加の兆候':'日照減少予報'}</div><div class="r-bar"><div class="r-bar-fill" style="width:${Math.max(0,100-sunMin)}%;background:${sunMin>=80?'var(--green)':sunMin>=50?'var(--sun)':'var(--red)'}"></div></div></div>
+        <div class="risk-card ${maxRH>80?'risk-danger':maxRH>65?'risk-warn':'risk-safe'}"><div class="r-title">💧 地表湿度</div><div class="r-value">${Math.round(maxRH)}%</div><div class="r-detail">気温${current.temp}°C / 露点${current.dewpoint}°C</div><div class="r-bar"><div class="r-bar-fill" style="width:${maxRH}%;background:${maxRH>80?'var(--red)':maxRH>65?'var(--sun)':'var(--green)'}"></div></div></div>
+      `;
+
+      document.getElementById('hourStrip').innerHTML = hours.map((h, i) => {
+        const icon = !h.is_day?'🌙':h.sunshine_pct>=80?'☀️':h.sunshine_pct>=50?'🌤️':h.sunshine_pct>0?'⛅':'☁️';
+        const cls = h.sunshine_pct>=80?'safe':h.sunshine_pct>=50?'warn':'bad';
+        return `<div class="hour-cell ${cls}${i===0?' now':''}"><div class="h-time">${i===0?'現在':`+${i}h`} (${h.hour}時)</div><div class="h-icon">${icon}</div><div class="h-sun">日照 ${h.sunshine_pct}%</div><div class="h-detail">日射 ${Math.round(h.direct_rad)}W/m²<br>湿度 ${h.rh}%/上空${h.rh_925}%<br>露点差 ${(h.temp-h.dewpoint).toFixed(1)}°C</div></div>`;
+      }).join('');
+    }
+
+    // Init
+    document.getElementById('inLat').value = '34.9869';
+    document.getElementById('inLon').value = '135.6867';
+    runAll();
+  </script>
+</body>
+</html>
