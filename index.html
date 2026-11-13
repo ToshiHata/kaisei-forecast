@@ -23,15 +23,17 @@
     .time-sub.latest{color:var(--sun)}
 
     .panel{padding:0 12px}
-    /* スライダーは画面端だと指で操作しづらいので左右に余白を取る */
-    .meter{position:relative;height:44px;margin:4px 24px 0;touch-action:none;cursor:pointer;user-select:none;-webkit-user-select:none}
-    .meter-track{position:absolute;left:0;right:0;top:20px;height:6px;border-radius:3px;background:rgba(255,255,255,0.10)}
-    .meter-fill{position:absolute;left:0;top:20px;height:6px;border-radius:3px;background:var(--sun);width:0}
-    .meter-ticks{position:absolute;left:0;right:0;top:8px;height:30px;display:flex;justify-content:space-between;pointer-events:none}
+    /* スライダー: .meter が指の反応範囲で、線（.meter-inner）より左右に20px広い。
+       つまみが端にあるとき、丸の外側半分を触っても反応させるため */
+    .meter{height:52px;margin:4px 4px 0;padding:0 20px;touch-action:none;cursor:pointer;user-select:none;-webkit-user-select:none}
+    .meter-inner{position:relative;height:100%}
+    .meter-track{position:absolute;left:0;right:0;top:23px;height:6px;border-radius:3px;background:rgba(255,255,255,0.10)}
+    .meter-fill{position:absolute;left:0;top:23px;height:6px;border-radius:3px;background:var(--sun);width:0}
+    .meter-ticks{position:absolute;left:0;right:0;top:11px;height:30px;display:flex;justify-content:space-between;pointer-events:none}
     .tick{width:2px;height:8px;margin-top:11px;background:rgba(255,255,255,0.12);border-radius:1px}
     .tick.loaded{background:rgba(255,255,255,0.45)}
     .tick.hour{height:16px;margin-top:7px}
-    .meter-thumb{position:absolute;top:12px;width:22px;height:22px;margin-left:-11px;border-radius:50%;background:#fff;border:3px solid var(--sun);left:0;pointer-events:none}
+    .meter-thumb{position:absolute;top:14px;width:24px;height:24px;margin-left:-12px;border-radius:50%;background:#fff;border:3px solid var(--sun);left:0;pointer-events:none}
     .meter-labels{margin:0 24px;user-select:none;-webkit-user-select:none;display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text2);font-variant-numeric:tabular-nums}
 
     .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
@@ -70,10 +72,12 @@
 
     <div class="panel">
       <div class="meter" id="meter">
-        <div class="meter-track"></div>
-        <div class="meter-fill" id="meterFill"></div>
-        <div class="meter-ticks" id="meterTicks"></div>
-        <div class="meter-thumb" id="meterThumb"></div>
+        <div class="meter-inner" id="meterInner">
+          <div class="meter-track"></div>
+          <div class="meter-fill" id="meterFill"></div>
+          <div class="meter-ticks" id="meterTicks"></div>
+          <div class="meter-thumb" id="meterThumb"></div>
+        </div>
       </div>
       <div class="meter-labels">
         <span id="labelStart">--:--</span>
@@ -656,7 +660,7 @@
       const seek = (e) => {
         const n = state.list.length;
         if (!n) return;
-        const rect = meter.getBoundingClientRect();
+        const rect = $('meterInner').getBoundingClientRect();
         const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         const idx = Math.round(pct * (n - 1));
         if (idx !== state.idx) { state.idx = idx; draw(); }
