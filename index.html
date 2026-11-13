@@ -3,702 +3,742 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>快晴キープ判定 - 衛星画像アニメーション付き</title>
-  <meta name="description" content="気象衛星ひまわりの赤外画像5時間アニメーションと登山向け快晴判定ツール">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <title>快晴チェック - ひまわり衛星画像</title>
+  <meta name="description" content="気象衛星ひまわりの直近5時間の画像で、このあと晴れが続くかを確認するページ">
   <style>
     *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-    :root{--bg:#0a0e1a;--glass:rgba(255,255,255,0.04);--border:rgba(255,255,255,0.08);--text:#f0f4ff;--text2:#8b95b0;--text3:#4b5578;--sun:#f59e0b;--blue:#38bdf8;--green:#34d399;--orange:#f97316;--red:#ef4444;--r-sm:8px;--r-md:12px;--r-lg:16px;--r-xl:24px}
-    body{font-family:'Inter','Noto Sans JP',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-    .bg-anim{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
-    .bg-anim::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(ellipse at 30% 20%,rgba(245,158,11,0.06)0%,transparent 50%),radial-gradient(ellipse at 70% 80%,rgba(56,189,248,0.04)0%,transparent 50%);animation:bgF 20s ease-in-out infinite}
-    @keyframes bgF{0%,100%{transform:translate(0,0)}50%{transform:translate(1%,-1%)}}
-    .container{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:20px 16px 60px}
-    .header{display:flex;align-items:baseline;justify-content:center;gap:12px;flex-wrap:wrap;text-align:center;padding:10px 0 12px}
-    .header h1{font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,#f59e0b,#fbbf24,#fde68a);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-    .header p{color:var(--text2);font-size:0.8rem;font-weight:300}
-    .loc-bar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
-    .loc-bar input{background:var(--glass);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 14px;color:var(--text);font-family:inherit;font-size:0.85rem;width:140px;outline:none;transition:border-color 0.3s}
-    .loc-bar input:focus{border-color:rgba(245,158,11,0.4)}
-    .loc-bar input::placeholder{color:var(--text3)}
-    .btn{padding:10px 18px;border:none;border-radius:var(--r-md);font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;transition:all 0.3s;display:inline-flex;align-items:center;gap:6px}
-    .btn-go{background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#78350f;box-shadow:0 4px 14px rgba(245,158,11,0.3)}
-    .btn-go:hover{transform:translateY(-2px)}
-    .btn-sub{background:var(--glass);color:var(--text2);border:1px solid var(--border)}
-    .btn-sub:hover{background:rgba(255,255,255,0.08);color:var(--text)}
-    .btn:disabled{opacity:0.5;cursor:not-allowed}
-    .error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:var(--r-md);padding:12px 16px;margin-bottom:14px;color:#fca5a5;display:none;align-items:center;gap:8px;font-size:0.82rem}
-    .error.show{display:flex}
-    .loc-name{text-align:center;margin-bottom:14px;font-size:0.8rem;color:var(--text2)}
-    .loc-name .name{color:var(--text);font-weight:600}
+    :root{--bg:#0a0e1a;--panel:rgba(255,255,255,0.05);--border:rgba(255,255,255,0.12);--text:#f0f4ff;--text2:#9aa4bf;--text3:#5b6588;--sun:#f59e0b;--blue:#38bdf8}
+    html{-webkit-text-size-adjust:100%}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans','Noto Sans JP','Yu Gothic UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+    .wrap{max-width:1200px;margin:0 auto;padding-bottom:32px}
+    .title{font-size:0.95rem;font-weight:700;padding:10px 12px 8px;color:var(--sun)}
 
-    .verdict-box{border-radius:var(--r-xl);padding:24px;margin-bottom:18px;text-align:center;backdrop-filter:blur(20px);border:2px solid var(--border);transition:all 0.5s}
-    .verdict-box.go{background:rgba(52,211,153,0.08);border-color:rgba(52,211,153,0.3)}
-    .verdict-box.caution{background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.3)}
-    .verdict-box.nogo{background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.3)}
-    .verdict-icon{font-size:48px;margin-bottom:8px}
-    .verdict-text{font-size:1.5rem;font-weight:900;margin-bottom:4px}
-    .verdict-box.go .verdict-text{color:var(--green)}
-    .verdict-box.caution .verdict-text{color:var(--sun)}
-    .verdict-box.nogo .verdict-text{color:var(--red)}
-    .verdict-sub{color:var(--text2);font-size:0.8rem;line-height:1.5}
-    .verdict-time{font-size:0.7rem;color:var(--text3);margin-top:8px}
+    /* 衛星画像: スマホ縦画面でも左右いっぱいに表示する */
+    .sat-wrap{position:relative;width:100%;aspect-ratio:16/9;background:#111827;overflow:hidden;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+    .sat-wrap.dragging{cursor:grabbing}
+    #satCanvas{display:block;width:100%;height:100%}
+    .time-badge{position:absolute;top:8px;left:8px;padding:4px 10px 5px;border-radius:8px;background:rgba(10,14,26,0.72);pointer-events:none;line-height:1.15}
+    .time-main{font-size:1.7rem;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:0.02em}
+    .time-sub{font-size:0.72rem;color:var(--text2);font-variant-numeric:tabular-nums}
+    .time-sub.latest{color:var(--sun)}
 
-    .risk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:18px}
-    .risk-card{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;position:relative;overflow:hidden}
-    .risk-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:3px;background:var(--bar-color,var(--blue));opacity:0.8}
-    .risk-card .r-title{font-size:0.7rem;color:var(--text2);font-weight:500;margin-bottom:5px}
-    .risk-card .r-value{font-size:1.2rem;font-weight:700;margin-bottom:2px}
-    .risk-card .r-detail{font-size:0.68rem;color:var(--text3);line-height:1.3}
-    .risk-card .r-bar{height:4px;border-radius:2px;background:rgba(255,255,255,0.06);margin-top:6px;overflow:hidden}
-    .risk-card .r-bar-fill{height:100%;border-radius:2px;transition:width 0.6s}
-    .risk-safe{--bar-color:linear-gradient(90deg,#34d399,#6ee7b7)}
-    .risk-warn{--bar-color:linear-gradient(90deg,#f59e0b,#fbbf24)}
-    .risk-danger{--bar-color:linear-gradient(90deg,#ef4444,#f87171)}
+    .panel{padding:0 12px}
+    .meter{position:relative;height:44px;margin-top:4px;touch-action:none;cursor:pointer;user-select:none;-webkit-user-select:none}
+    .meter-track{position:absolute;left:0;right:0;top:20px;height:6px;border-radius:3px;background:rgba(255,255,255,0.10)}
+    .meter-fill{position:absolute;left:0;top:20px;height:6px;border-radius:3px;background:var(--sun);width:0}
+    .meter-ticks{position:absolute;left:0;right:0;top:8px;height:30px;display:flex;justify-content:space-between;pointer-events:none}
+    .tick{width:2px;height:8px;margin-top:11px;background:rgba(255,255,255,0.12);border-radius:1px}
+    .tick.loaded{background:rgba(255,255,255,0.45)}
+    .tick.hour{height:16px;margin-top:7px}
+    .meter-thumb{position:absolute;top:12px;width:22px;height:22px;margin-left:-11px;border-radius:50%;background:#fff;border:3px solid var(--sun);left:0;pointer-events:none}
+    .meter-labels{user-select:none;-webkit-user-select:none;display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text2);font-variant-numeric:tabular-nums}
 
-    /* Satellite */
-    .sat-section{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:var(--r-xl);padding:24px;margin-bottom:18px}
-    #result{display:flex;flex-direction:column}
-    #satSection{order:1}
-    #verdictBox{order:2}
-    #riskGrid{order:3}
-    #result .strip-section{order:4}
-    .sat-section h2{font-size:1rem;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:8px}
-    .sat-desc{font-size:0.73rem;color:var(--text2);margin-bottom:14px;line-height:1.5}
-    .sat-viewer{position:relative;background:#111827;border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border)}
-    .sat-canvas-wrap{position:relative;width:100%;padding-bottom:56.25%;overflow:hidden;touch-action:none;cursor:grab}
-    .sat-canvas-wrap.dragging{cursor:grabbing}
-    .sat-canvas-wrap canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+    .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+    button,select{font-family:inherit;font-size:0.85rem;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:10px;min-height:40px;padding:0 14px;cursor:pointer}
+    button:disabled{opacity:0.5;cursor:not-allowed}
+    select option{color:#111}
+    .seg{display:inline-flex}
+    .seg button{border-radius:0;border-left-width:0}
+    .seg button:first-child{border-radius:10px 0 0 10px;border-left-width:1px}
+    .seg button:last-child{border-radius:0 10px 10px 0}
+    .seg button.active{background:var(--sun);color:#3b2504;border-color:var(--sun);font-weight:700}
+    .status{margin-top:10px;font-size:0.78rem;color:var(--text2);min-height:1.2em}
+    .status.error{color:#fca5a5}
+    .legend{margin-top:6px;font-size:0.75rem;color:var(--text2);display:none}
+    .legend.show{display:block}
+    .hint{margin-top:6px;font-size:0.72rem;color:var(--text3)}
 
-    /* Timeline meter */
-    .sat-timeline{padding:14px 16px 10px;background:rgba(0,0,0,0.4)}
-    .timeline-meter{position:relative;height:28px;margin-bottom:6px;cursor:pointer;user-select:none;touch-action:none}
-    .timeline-track{position:absolute;top:12px;left:0;right:0;height:4px;background:rgba(255,255,255,0.08);border-radius:2px}
-    .timeline-fill{position:absolute;top:12px;left:0;height:4px;background:linear-gradient(90deg,rgba(56,189,248,0.3),var(--sun));border-radius:2px;transition:width 0.1s}
-    .timeline-thumb{position:absolute;top:6px;width:16px;height:16px;background:var(--sun);border-radius:50%;transform:translateX(-50%);box-shadow:0 0 8px rgba(245,158,11,0.5);transition:left 0.1s;z-index:2}
-    .timeline-labels{display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text3)}
-    .timeline-labels .current-label{color:var(--sun);font-weight:600}
-    .timeline-ticks{position:absolute;top:10px;left:0;right:0;height:8px;display:flex;justify-content:space-between;pointer-events:none}
-    .timeline-ticks .tick{width:1px;height:100%;background:rgba(255,255,255,0.1)}
-    .timeline-ticks .tick.hour{background:rgba(255,255,255,0.2);height:12px;top:8px}
-    .sat-controls{display:flex;align-items:center;gap:10px;padding:0 16px 12px;flex-wrap:wrap}
-    .sat-controls button{padding:5px 12px;border:1px solid var(--border);border-radius:var(--r-sm);background:rgba(255,255,255,0.06);color:var(--text);font-family:inherit;font-size:0.72rem;cursor:pointer;transition:all 0.2s}
-    .sat-controls button:hover{background:rgba(255,255,255,0.12)}
-    .speed-select{padding:4px 8px;border:1px solid var(--border);border-radius:var(--r-sm);background:rgba(255,255,255,0.06);color:var(--text);font-family:inherit;font-size:0.7rem}
-    .frame-time{font-size:0.78rem;font-weight:600;color:var(--sun);margin-left:auto}
-    .map-hint{font-size:0.66rem;color:var(--text3);width:100%}
-    .sat-loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text2);font-size:0.82rem;display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none}
-    .sat-loading .mini-spin{width:32px;height:32px;border:2px solid rgba(245,158,11,0.2);border-top-color:var(--sun);border-radius:50%;animation:spin 0.8s linear infinite}
-    .sat-progress{font-size:0.7rem;color:var(--text3)}
-    .link-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-    .link-row a{font-size:0.72rem;color:var(--blue);text-decoration:none;padding:5px 12px;border-radius:var(--r-sm);background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.15);transition:all 0.3s}
-    .link-row a:hover{background:rgba(56,189,248,0.15)}
-
-    .strip-section{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:var(--r-xl);padding:20px;margin-bottom:18px}
-    .strip-section h2{font-size:0.95rem;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-    .hour-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-    .hour-cell{text-align:center;padding:10px 4px;border-radius:var(--r-md);background:rgba(255,255,255,0.02);border:1px solid var(--border);transition:transform 0.2s}
-    .hour-cell:hover{transform:scale(1.04)}
-    .hour-cell.now{border-color:rgba(245,158,11,0.4);box-shadow:0 0 12px rgba(245,158,11,0.1)}
-    .hour-cell .h-time{font-size:0.68rem;color:var(--text2);font-weight:500;margin-bottom:4px}
-    .hour-cell .h-icon{font-size:1.4rem;margin-bottom:4px}
-    .hour-cell .h-sun{font-size:0.8rem;font-weight:700;margin-bottom:2px}
-    .hour-cell .h-detail{font-size:0.6rem;color:var(--text3);line-height:1.3}
-    .hour-cell.safe .h-sun{color:var(--green)}
-    .hour-cell.warn .h-sun{color:var(--sun)}
-    .hour-cell.bad .h-sun{color:var(--red)}
-
-    .footer{text-align:center;padding:14px;color:var(--text3);font-size:0.66rem}
-    .footer a{color:var(--text2);text-decoration:none}
-    .loading{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,14,26,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;transition:opacity 0.5s}
-    .loading.hidden{opacity:0;pointer-events:none}
-    .spinner{width:44px;height:44px;border:3px solid rgba(245,158,11,0.2);border-top-color:var(--sun);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:14px}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .fade-in{animation:fadeIn 0.6s ease-out forwards;opacity:0}
-    @keyframes fadeIn{to{opacity:1}}
-    .d1{animation-delay:.1s}.d2{animation-delay:.2s}.d3{animation-delay:.3s}.d4{animation-delay:.4s}
-    @media(max-width:640px){.container{padding:12px 10px 40px}.header h1{font-size:1.2rem}.verdict-icon{font-size:36px}.verdict-text{font-size:1.1rem}.hour-strip{grid-template-columns:repeat(2,1fr)}.risk-grid{grid-template-columns:1fr}}
+    .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+    .links a{color:var(--blue);text-decoration:none;font-size:0.82rem;border:1px solid var(--border);border-radius:10px;padding:9px 14px;background:var(--panel)}
+    .footer{margin-top:28px;font-size:0.72rem;color:var(--text3);display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+    .footer a{color:var(--text2)}
+    .footer button{min-height:32px;font-size:0.72rem;color:var(--text2);padding:0 10px}
   </style>
 </head>
 <body>
-  <div class="bg-anim"></div>
-  <div class="loading" id="loader"><div class="spinner"></div><div style="color:var(--text2);font-size:0.85rem">データを取得中...</div></div>
-  <div class="container">
-    <header class="header">
-      <h1>快晴キープ判定</h1>
-      <p>衛星画像5時間 + 3時間先予測</p>
-    </header>
-    <div class="loc-bar">
-      <input type="text" id="inLat" placeholder="緯度">
-      <input type="text" id="inLon" placeholder="経度">
-      <button class="btn btn-go" onclick="runAll()">☀️ 判定</button>
-      <button class="btn btn-sub" onclick="geolocate()">📍 現在地</button>
-    </div>
-    <div class="error" id="err"><span>⚠️</span><span id="errText"></span></div>
-    <div id="locName" class="loc-name" style="display:none"></div>
+  <div class="wrap">
+    <h1 class="title">⛰️ 快晴チェック</h1>
 
-    <div id="result" style="display:none">
-      <div class="verdict-box fade-in d1" id="verdictBox">
-        <div class="verdict-icon" id="verdictIcon"></div>
-        <div class="verdict-text" id="verdictText"></div>
-        <div class="verdict-sub" id="verdictSub"></div>
-        <div class="verdict-time" id="verdictTime"></div>
-      </div>
-      <div class="risk-grid fade-in d2" id="riskGrid"></div>
-
-      <div class="sat-section fade-in d3" id="satSection">
-        <h2>🛰️ 直近5時間の赤外衛星画像</h2>
-        <p class="sat-desc">白い部分＝雲。オレンジの十字があなたの位置。雲が近づいていないか確認してください。</p>
-        <div class="sat-viewer">
-          <div class="sat-canvas-wrap">
-            <canvas id="satCanvas" width="512" height="288"></canvas>
-            <div class="sat-loading" id="satLoading">
-              <div class="mini-spin"></div>
-              <div>衛星画像を読み込み中...</div>
-              <div class="sat-progress" id="satProgress">0 / 30</div>
-            </div>
-          </div>
-          <div class="sat-timeline">
-            <div class="timeline-meter" id="timelineMeter">
-              <div class="timeline-track"></div>
-              <div class="timeline-fill" id="timelineFill"></div>
-              <div class="timeline-ticks" id="timelineTicks"></div>
-              <div class="timeline-thumb" id="timelineThumb"></div>
-            </div>
-            <div class="timeline-labels">
-              <span id="labelStart">-5h</span>
-              <span id="labelQ1">-3h45m</span>
-              <span id="labelMid">-2h30m</span>
-              <span id="labelQ3">-1h15m</span>
-              <span class="current-label" id="labelEnd">現在</span>
-            </div>
-          </div>
-          <div class="sat-controls">
-            <button id="btnPlay" onclick="togglePlay()">▶ 再生</button>
-            <button id="btnResetMap" onclick="resetMapView()">表示リセット</button>
-            <select class="speed-select" id="speedSelect" onchange="changeSpeed()">
-              <option value="800">遅い</option>
-              <option value="400" selected>普通</option>
-              <option value="200">速い</option>
-            </select>
-            <span class="frame-time" id="frameTime">--</span>
-            <span class="map-hint">地図操作: ホイール/ピンチで拡大縮小、ドラッグで移動</span>
-          </div>
-        </div>
-        <div class="link-row">
-          <a href="https://himawari.asia" target="_blank" rel="noopener">🌏 ひまわり全画面</a>
-          <a href="https://www.jma.go.jp/bosai/map.html#contents=himawari" target="_blank" rel="noopener">🏛️ 気象庁</a>
-          <a href="https://weathernews.jp/onebox/satellite/" target="_blank" rel="noopener">📺 ウェザーニュース</a>
-        </div>
-      </div>
-
-      <div class="strip-section fade-in d4">
-        <h2>🕐 今後3時間（モデル予報・参考）</h2>
-        <div class="hour-strip" id="hourStrip"></div>
+    <div class="sat-wrap" id="satWrap">
+      <canvas id="satCanvas" width="768" height="432"></canvas>
+      <div class="time-badge">
+        <div class="time-main" id="timeMain">--:--</div>
+        <div class="time-sub" id="timeSub">読み込み中…</div>
       </div>
     </div>
-    <footer class="footer">
-      <p>衛星画像: <a href="https://www.jma.go.jp/" target="_blank">気象庁</a> ひまわり | 予報: <a href="https://open-meteo.com/" target="_blank">Open-Meteo API</a></p>
-      <p style="margin-top:3px">⚠️ モデル予報は参考値です。衛星画像での目視確認を推奨</p>
-    </footer>
+
+    <div class="panel">
+      <div class="meter" id="meter">
+        <div class="meter-track"></div>
+        <div class="meter-fill" id="meterFill"></div>
+        <div class="meter-ticks" id="meterTicks"></div>
+        <div class="meter-thumb" id="meterThumb"></div>
+      </div>
+      <div class="meter-labels">
+        <span id="labelStart">--:--</span>
+        <span id="labelEnd">--:--</span>
+      </div>
+
+      <div class="controls">
+        <button type="button" id="btnPlay">▶ 再生</button>
+        <select id="speedSelect" aria-label="再生速度">
+          <option value="800">遅い</option>
+          <option value="400" selected>普通</option>
+          <option value="200">速い</option>
+        </select>
+        <div class="seg" role="group" aria-label="画像の種類">
+          <button type="button" data-mode="ir" class="active">赤外</button>
+          <button type="button" data-mode="vis">可視</button>
+          <button type="button" data-mode="mix">合成</button>
+        </div>
+        <button type="button" id="btnRefresh">🔄 更新</button>
+        <button type="button" id="btnLocate">📍 現在地</button>
+        <button type="button" id="btnResetView">表示リセット</button>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="legend" id="legend">合成の色: ピンク＝低い雲 / 青＝薄くて高い雲 / 白＝厚い雲。夜の部分は赤外のみ（白黒）で表示します。</div>
+      <div class="hint">オレンジの十字が登録地点。ホイール/ピンチで拡大縮小（縮小すると中国沿岸まで見えます）、ドラッグで移動。</div>
+
+      <div class="links">
+        <a href="https://www.jma.go.jp/bosai/map.html#contents=himawari" target="_blank" rel="noopener">🏛️ 気象庁</a>
+        <a href="https://weathernews.jp/onebox/satellite/" target="_blank" rel="noopener">📺 ウェザーニュース</a>
+      </div>
+
+      <footer class="footer">
+        <span>衛星画像・海岸線: <a href="https://www.jma.go.jp/" target="_blank" rel="noopener">気象庁</a> ひまわり</span>
+        <button type="button" id="btnResetLoc">初期位置に戻す</button>
+      </footer>
+    </div>
   </div>
 
   <script>
-    // ── Satellite Config ──
+    'use strict';
+
+    // ── 設定 ──
     const SAT_BASE = 'https://www.jma.go.jp/bosai/himawari/data/satimg';
     const TIMES_URL = `${SAT_BASE}/targetTimes_fd.json`;
+    const COAST_BASE = 'https://www.jma.go.jp/tile/jma/sat';
     const ZOOM = 5;
-    const BAND = 'B13', PROD = 'TBB';
-    // Zoom 5: x=27: 123.75-135°, x=28: 135°-146.25°
-    // y=12: ~41°N to ~32°N, y=13: ~32°N to ~22°N
-    const TILES = [
-      { x: 27, y: 12 }, { x: 28, y: 12 },
-      { x: 27, y: 13 }, { x: 28, y: 13 },
-    ];
     const TILE_SZ = 256;
-    const COLS = 2, ROWS = 2;
-    const TILE_X_MIN = 27, TILE_Y_MIN = 12;
-    const FRAME_COUNT = 30; // 5 hours × 6 per hour
-    // Kyoto 35°N → tileY=12.67 → pixel 172 in tile row.
-    // Canvas 288px, center=144. Offset = 144-172 = -28
-    const Y_OFFSET = -28;
+    // ズーム5のタイル: x=26〜28 が東経112.5〜146.25度、y=12〜13 が北緯約41〜22度
+    const TILE_X_MIN = 26, TILE_Y_MIN = 12, COLS = 3, ROWS = 2;
+    const WORLD_W = COLS * TILE_SZ, WORLD_H = ROWS * TILE_SZ;
+    // 画面に見せる範囲（論理座標）。横は全幅、縦は16:9に収まる分だけ
+    const VIEW_W = WORLD_W, VIEW_H = WORLD_W * 9 / 16;
+    const TILES = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) TILES.push({ x: TILE_X_MIN + c, y: TILE_Y_MIN + r });
 
-    let satFrames = [], satPlaying = false, satFrameIdx = 0, satInterval = null, satSpeed = 400;
-    const MAP_MIN_SCALE = 1;
-    const MAP_MAX_SCALE = 6;
-    const mapView = { scale: 1, offsetX: 0, offsetY: 0 };
+    const BANDS = { ir: 'B13/TBB', vis: 'B03/ALBD' };
+    const FRAME_COUNT = 30;            // 5時間 × 10分間隔
+    const LOAD_CONCURRENCY = 4;        // 同時に読み込むコマ数
+    const AUTO_REFRESH_MS = 5 * 60 * 1000;
+    const WAKE_REFRESH_MS = 2 * 60 * 1000;
+    const RETRY_MAX = 5, RETRY_BASE_MS = 3000;
+    const MAX_SCALE = 6;
+    // 開いたときの表示: 2倍に拡大し、登録地点を左から62%・上から45%の位置に置く（西側を広く見せる）
+    const HOME_SCALE = 2, HOME_X = 0.62, HOME_Y = 0.45;
+    const DEFAULT_LOC = { lat: 34.9869, lon: 135.6867 };
+    const LOC_KEY = 'kaisei.location';
 
-    function latLonToPixel(lat, lon) {
-      const tilesPerSide = Math.pow(2, ZOOM);
-      const tileXf = ((lon + 180) / 360) * tilesPerSide;
-      const latRad = lat * Math.PI / 180;
-      const tileYf = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * tilesPerSide;
-      const scale = 512 / (COLS * TILE_SZ);
-      return {
-        x: (tileXf - TILE_X_MIN) * TILE_SZ * scale,
-        y: (tileYf - TILE_Y_MIN) * TILE_SZ * scale + Y_OFFSET,
-      };
-    }
+    // 合成画像の調整値
+    const MIX_IR_LOW = 0.30, MIX_IR_GAIN = 1 / 0.55;   // 赤外の「雲なし」を暗く落とすための伸長
+    const SUN_NIGHT = Math.sin(-2 * Math.PI / 180);    // これ以下は夜（赤外のみ）
+    const SUN_DAY = Math.sin(8 * Math.PI / 180);       // これ以上は昼（合成）
 
-    function clampMapView() {
-      const canvas = document.getElementById('satCanvas');
-      const tileScale = canvas.width / (COLS * TILE_SZ);
-      const content = {
-        left: 0,
-        top: Y_OFFSET,
-        right: COLS * TILE_SZ * tileScale,
-        bottom: Y_OFFSET + ROWS * TILE_SZ * tileScale,
-      };
-      const minX = canvas.width - content.right * mapView.scale;
-      const maxX = -content.left * mapView.scale;
-      const minY = canvas.height - content.bottom * mapView.scale;
-      const maxY = -content.top * mapView.scale;
-      mapView.offsetX = Math.min(maxX, Math.max(minX, mapView.offsetX));
-      mapView.offsetY = Math.min(maxY, Math.max(minY, mapView.offsetY));
-    }
+    // ── 状態 ──
+    const state = {
+      mode: 'ir',
+      list: [],          // [{basetime, validtime}] 古い順
+      idx: 0,
+      playing: false,
+      playTimer: null,
+      speed: 400,
+      runId: 0,          // 読み込みの世代。更新・モード切替で進め、古い読み込みを止める
+      refreshing: false,
+      retryCount: 0,
+      retryTimer: null,
+      lastOk: 0,
+      loc: loadLocation(),
+    };
+    const view = { s: 1, ox: 0, oy: 0 };
+    const tileCache = new Map();   // `${band}|${validtime}` → { tiles, done, failed, promise }
+    const mixCache = new Map();    // validtime → canvas（合成済み）
+    const coastTiles = [];         // 海岸線の重ね合わせ（1回だけ読み込む）
 
-    function zoomMapAt(point, nextScale) {
-      const oldScale = mapView.scale;
-      nextScale = Math.max(MAP_MIN_SCALE, Math.min(MAP_MAX_SCALE, nextScale));
-      if (nextScale === oldScale) return;
+    const $ = (id) => document.getElementById(id);
+    const canvas = $('satCanvas');
+    const ctx = canvas.getContext('2d');
 
-      mapView.offsetX = point.x - ((point.x - mapView.offsetX) * nextScale / oldScale);
-      mapView.offsetY = point.y - ((point.y - mapView.offsetY) * nextScale / oldScale);
-      mapView.scale = nextScale;
-      clampMapView();
-      drawFrame();
-    }
-
-    function panMapBy(dx, dy) {
-      mapView.offsetX += dx;
-      mapView.offsetY += dy;
-      clampMapView();
-      drawFrame();
-    }
-
-    function resetMapView() {
-      mapView.scale = 1;
-      mapView.offsetX = 0;
-      mapView.offsetY = 0;
-      drawFrame();
-    }
-
-    function canvasPointFromEvent(e) {
-      const canvas = document.getElementById('satCanvas');
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: (e.clientX - rect.left) * canvas.width / rect.width,
-        y: (e.clientY - rect.top) * canvas.height / rect.height,
-      };
-    }
-
-    async function loadSatelliteAnimation() {
-      const loadEl = document.getElementById('satLoading');
-      const progEl = document.getElementById('satProgress');
-      loadEl.style.display = 'flex';
-
+    // ── 位置 ──
+    function loadLocation() {
       try {
-        const timesRes = await fetch(TIMES_URL);
-        if (!timesRes.ok) throw new Error('時刻リスト取得失敗');
-        const allTimes = await timesRes.json();
-        const recent = allTimes.slice(-FRAME_COUNT);
-        let loaded = 0;
-        satFrames = [];
-
-        for (const entry of recent) {
-          const bt = entry.basetime, vt = entry.validtime;
-          const tilePromises = TILES.map(t => new Promise((resolve) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => resolve({ x: t.x, y: t.y, img });
-            img.onerror = () => resolve({ x: t.x, y: t.y, img: null });
-            img.src = `${SAT_BASE}/${bt}/fd/${vt}/${BAND}/${PROD}/${ZOOM}/${t.x}/${t.y}.jpg`;
-          }));
-          const tiles = await Promise.all(tilePromises);
-          satFrames.push({ basetime: bt, tiles });
-          loaded++;
-          progEl.textContent = `${loaded} / ${FRAME_COUNT}`;
+        const raw = localStorage.getItem(LOC_KEY);
+        if (raw) {
+          const v = JSON.parse(raw);
+          if (Number.isFinite(v.lat) && Number.isFinite(v.lon)) return { lat: v.lat, lon: v.lon };
         }
+      } catch (e) { /* 保存領域が使えない・壊れている場合は初期位置を使う */ }
+      return { ...DEFAULT_LOC };
+    }
 
-        loadEl.style.display = 'none';
+    function saveLocation(loc) {
+      try { localStorage.setItem(LOC_KEY, JSON.stringify(loc)); return true; }
+      catch (e) { return false; }
+    }
 
-        // Build timeline ticks and labels
-        buildTimelineLabels();
+    function latLonToWorld(lat, lon) {
+      const n = Math.pow(2, ZOOM);
+      const xf = (lon + 180) / 360 * n;
+      const rad = lat * Math.PI / 180;
+      const yf = (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * n;
+      return { x: (xf - TILE_X_MIN) * TILE_SZ, y: (yf - TILE_Y_MIN) * TILE_SZ };
+    }
 
-        satFrameIdx = satFrames.length - 1;
-        drawFrame();
-      } catch (e) {
-        loadEl.innerHTML = `<div style="color:#fca5a5">⚠️ 衛星画像の読み込みに失敗</div><div class="sat-progress">${e.message}</div>`;
+    // ── 時刻 ──
+    function parseUtc(ts) {
+      return Date.UTC(+ts.slice(0, 4), +ts.slice(4, 6) - 1, +ts.slice(6, 8), +ts.slice(8, 10), +ts.slice(10, 12), +ts.slice(12, 14));
+    }
+    const pad2 = (n) => String(n).padStart(2, '0');
+    function jstParts(ms) {
+      const d = new Date(ms + 9 * 3600 * 1000);
+      return { md: `${d.getUTCMonth() + 1}/${d.getUTCDate()}`, hm: `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`, min: d.getUTCMinutes() };
+    }
+    function agoText(ms) {
+      const m = Math.max(0, Math.round((Date.now() - ms) / 60000));
+      if (m < 60) return `${m}分前`;
+      return `${Math.floor(m / 60)}時間${m % 60}分前`;
+    }
+
+    // ── 表示状態 ──
+    function setStatus(text, isError) {
+      const el = $('status');
+      el.textContent = text;
+      el.classList.toggle('error', !!isError);
+    }
+
+    function frameReady(mode, entry) {
+      if (mode === 'mix') return mixCache.has(entry.validtime);
+      const set = tileCache.get(`${BANDS[mode]}|${entry.validtime}`);
+      return !!(set && set.done);
+    }
+
+    function updateProgress() {
+      const ticks = $('meterTicks').children;
+      let ready = 0;
+      state.list.forEach((e, i) => {
+        const ok = frameReady(state.mode, e);
+        if (ok) ready++;
+        if (ticks[i]) ticks[i].classList.toggle('loaded', ok);
+      });
+      if (!state.list.length) return;
+      if (ready < state.list.length) setStatus(`読み込み中 ${ready} / ${state.list.length}`);
+      else setStatus(`最終更新 ${jstParts(state.lastOk).hm}`);
+    }
+
+    function buildTimeline() {
+      const box = $('meterTicks');
+      box.textContent = '';
+      for (const e of state.list) {
+        const t = document.createElement('div');
+        t.className = 'tick' + (jstParts(parseUtc(e.validtime)).min === 0 ? ' hour' : '');
+        box.appendChild(t);
+      }
+      if (state.list.length) {
+        $('labelStart').textContent = jstParts(parseUtc(state.list[0].validtime)).hm;
+        $('labelEnd').textContent = jstParts(parseUtc(state.list[state.list.length - 1].validtime)).hm + '（最新）';
       }
     }
 
-    function buildTimelineLabels() {
-      if (!satFrames.length) return;
-      const first = satFrames[0].basetime;
-      const last = satFrames[satFrames.length - 1].basetime;
+    function updateTimeUi() {
+      const n = state.list.length;
+      if (!n) return;
+      const pct = n > 1 ? state.idx / (n - 1) * 100 : 100;
+      $('meterFill').style.width = pct + '%';
+      $('meterThumb').style.left = pct + '%';
 
-      const toJST = (bt) => {
-        const utcH = parseInt(bt.slice(8, 10));
-        const m = bt.slice(10, 12);
-        const jstH = (utcH + 9) % 24;
-        return `${String(jstH).padStart(2, '0')}:${m}`;
-      };
+      const entry = state.list[state.idx];
+      const ms = parseUtc(entry.validtime);
+      const p = jstParts(ms);
+      const isLatest = state.idx === n - 1;
+      $('timeMain').textContent = p.hm;
+      const sub = $('timeSub');
+      const ready = frameReady(state.mode, entry);
+      sub.textContent = ready ? `${p.md} ・ ${agoText(ms)}${isLatest ? ' ・ 最新' : ''}` : `${p.md} ・ 読み込み中…`;
+      sub.classList.toggle('latest', ready && isLatest);
+    }
 
-      document.getElementById('labelStart').textContent = toJST(first);
-      document.getElementById('labelEnd').textContent = toJST(last) + ' (最新)';
+    // ── 描画 ──
+    function resizeCanvas() {
+      const rect = $('satWrap').getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const w = Math.max(1, Math.round(rect.width * dpr));
+      const h = Math.max(1, Math.round(rect.width * dpr * VIEW_H / VIEW_W));
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+      draw();
+    }
 
-      const q1 = satFrames[Math.floor(satFrames.length * 0.25)]?.basetime;
-      const mid = satFrames[Math.floor(satFrames.length * 0.5)]?.basetime;
-      const q3 = satFrames[Math.floor(satFrames.length * 0.75)]?.basetime;
-      if (q1) document.getElementById('labelQ1').textContent = toJST(q1);
-      if (mid) document.getElementById('labelMid').textContent = toJST(mid);
-      if (q3) document.getElementById('labelQ3').textContent = toJST(q3);
+    function homeView() {
+      const w = latLonToWorld(state.loc.lat, state.loc.lon);
+      view.s = HOME_SCALE;
+      view.ox = VIEW_W * HOME_X - w.x * view.s;
+      view.oy = VIEW_H * HOME_Y - w.y * view.s;
+      clampView();
+    }
 
-      // Build ticks
-      const tickContainer = document.getElementById('timelineTicks');
-      tickContainer.innerHTML = '';
-      for (let i = 0; i < satFrames.length; i++) {
-        const tick = document.createElement('div');
-        tick.className = 'tick' + (i % 6 === 0 ? ' hour' : '');
-        tickContainer.appendChild(tick);
+    function clampView() {
+      view.s = Math.max(1, Math.min(MAX_SCALE, view.s));
+      view.ox = Math.min(0, Math.max(VIEW_W - WORLD_W * view.s, view.ox));
+      view.oy = Math.min(0, Math.max(VIEW_H - WORLD_H * view.s, view.oy));
+    }
+
+    // 画像座標 → 画面のピクセル。タイルの継ぎ目に隙間が出ないよう整数に丸める
+    function toDevice(wx, wy) {
+      const k = canvas.width / VIEW_W;
+      return { x: Math.round((wx * view.s + view.ox) * k), y: Math.round((wy * view.s + view.oy) * k) };
+    }
+
+    function drawTiles(tiles) {
+      for (const t of tiles) {
+        if (!t.img) continue;
+        const col = t.x - TILE_X_MIN, row = t.y - TILE_Y_MIN;
+        const a = toDevice(col * TILE_SZ, row * TILE_SZ);
+        const b = toDevice((col + 1) * TILE_SZ, (row + 1) * TILE_SZ);
+        ctx.drawImage(t.img, a.x, a.y, b.x - a.x, b.y - a.y);
       }
     }
 
-    function updateTimelineMeter() {
-      if (!satFrames.length) return;
-      const pct = (satFrameIdx / (satFrames.length - 1)) * 100;
-      document.getElementById('timelineFill').style.width = pct + '%';
-      document.getElementById('timelineThumb').style.left = pct + '%';
-
-      const bt = satFrames[satFrameIdx].basetime;
-      const utcDate = new Date(Date.UTC(
-        parseInt(bt.slice(0, 4), 10),
-        parseInt(bt.slice(4, 6), 10) - 1,
-        parseInt(bt.slice(6, 8), 10),
-        parseInt(bt.slice(8, 10), 10),
-        parseInt(bt.slice(10, 12), 10)
-      ));
-      const jstDate = new Date(utcDate.getTime() + 9 * 60 * 60 * 1000);
-      const dateStr = `${String(jstDate.getUTCMonth() + 1).padStart(2, '0')}/${String(jstDate.getUTCDate()).padStart(2, '0')}`;
-      const timeStr = `${String(jstDate.getUTCHours()).padStart(2, '0')}:${String(jstDate.getUTCMinutes()).padStart(2, '0')}`;
-      document.getElementById('frameTime').textContent = `${dateStr} ${timeStr} JST`;
+    function drawCrosshair() {
+      const w = latLonToWorld(state.loc.lat, state.loc.lon);
+      const p = toDevice(w.x, w.y);
+      if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) return;
+      const u = canvas.width / $('satWrap').getBoundingClientRect().width || 1;  // CSS 1px あたりの画素数
+      ctx.save();
+      ctx.lineWidth = 2 * u;
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 13 * u, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(249,115,22,0.95)';
+      ctx.beginPath();
+      ctx.moveTo(p.x - 12 * u, p.y); ctx.lineTo(p.x - 4 * u, p.y);
+      ctx.moveTo(p.x + 4 * u, p.y); ctx.lineTo(p.x + 12 * u, p.y);
+      ctx.moveTo(p.x, p.y - 12 * u); ctx.lineTo(p.x, p.y - 4 * u);
+      ctx.moveTo(p.x, p.y + 4 * u); ctx.lineTo(p.x, p.y + 12 * u);
+      ctx.stroke();
+      ctx.restore();
     }
 
-    function drawFrame() {
-      if (!satFrames.length) return;
-      const frame = satFrames[satFrameIdx];
-      const canvas = document.getElementById('satCanvas');
-      const ctx = canvas.getContext('2d');
-      const scale = canvas.width / (COLS * TILE_SZ);
-
+    function draw() {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = '#111827';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.save();
-      ctx.translate(mapView.offsetX, mapView.offsetY);
-      ctx.scale(mapView.scale, mapView.scale);
-
-      // Draw tiles (2 rows, shifted so Kyoto is vertically centered)
-      for (const t of frame.tiles) {
-        if (!t.img) continue;
-        const col = t.x - TILE_X_MIN;
-        const row = t.y - TILE_Y_MIN;
-        ctx.drawImage(t.img, col * TILE_SZ * scale, row * TILE_SZ * scale + Y_OFFSET, TILE_SZ * scale, TILE_SZ * scale);
-      }
-      ctx.restore();
-
-      // User position crosshair
-      const lat = parseFloat(document.getElementById('inLat').value);
-      const lon = parseFloat(document.getElementById('inLon').value);
-      if (!isNaN(lat) && !isNaN(lon)) {
-        const pos = latLonToPixel(lat, lon);
-        const screenPos = {
-          x: pos.x * mapView.scale + mapView.offsetX,
-          y: pos.y * mapView.scale + mapView.offsetY,
-        };
-        if (screenPos.x >= 0 && screenPos.x <= canvas.width && screenPos.y >= 0 && screenPos.y <= canvas.height) {
-          ctx.save();
-          ctx.strokeStyle = 'rgba(245, 158, 11, 0.9)';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(screenPos.x - 10, screenPos.y); ctx.lineTo(screenPos.x - 3, screenPos.y);
-          ctx.moveTo(screenPos.x + 3, screenPos.y); ctx.lineTo(screenPos.x + 10, screenPos.y);
-          ctx.moveTo(screenPos.x, screenPos.y - 10); ctx.lineTo(screenPos.x, screenPos.y - 3);
-          ctx.moveTo(screenPos.x, screenPos.y + 3); ctx.lineTo(screenPos.x, screenPos.y + 10);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(screenPos.x, screenPos.y, 14, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(245, 158, 11, 0.4)';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.restore();
+      const entry = state.list[state.idx];
+      if (entry && frameReady(state.mode, entry)) {
+        if (state.mode === 'mix') {
+          const a = toDevice(0, 0), b = toDevice(WORLD_W, WORLD_H);
+          ctx.drawImage(mixCache.get(entry.validtime), a.x, a.y, b.x - a.x, b.y - a.y);
+        } else {
+          drawTiles(tileCache.get(`${BANDS[state.mode]}|${entry.validtime}`).tiles);
         }
       }
-
-      updateTimelineMeter();
+      drawTiles(coastTiles);
+      drawCrosshair();
+      updateTimeUi();
     }
 
-    function startAnimation() {
-      if (satInterval) clearInterval(satInterval);
-      satInterval = setInterval(() => {
-        satFrameIdx = (satFrameIdx + 1) % satFrames.length;
-        drawFrame();
-      }, satSpeed);
+    // ── 読み込み ──
+    function loadImage(url) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = url;
+      });
+    }
+
+    function loadTileSet(band, entry) {
+      const key = `${band}|${entry.validtime}`;
+      let set = tileCache.get(key);
+      if (set) return set.promise;
+      set = { tiles: [], done: false, failed: false, promise: null };
+      set.promise = Promise.all(TILES.map(async (t) => {
+        const img = await loadImage(`${SAT_BASE}/${entry.basetime}/fd/${entry.validtime}/${band}/${ZOOM}/${t.x}/${t.y}.jpg`);
+        return { x: t.x, y: t.y, img };
+      })).then((tiles) => {
+        set.tiles = tiles;
+        set.failed = tiles.some((t) => !t.img);
+        set.done = true;
+        return set;
+      });
+      tileCache.set(key, set);
+      return set.promise;
+    }
+
+    async function loadCoast() {
+      const tiles = await Promise.all(TILES.map(async (t) => ({ x: t.x, y: t.y, img: await loadImage(`${COAST_BASE}/${ZOOM}/${t.x}/${t.y}.png`) })));
+      coastTiles.length = 0;
+      coastTiles.push(...tiles);
+      draw();
+    }
+
+    // ── 合成（可視＝明るさ、赤外＝色） ──
+    const scratch = [0, 1].map(() => {
+      const c = document.createElement('canvas');
+      c.width = WORLD_W; c.height = WORLD_H;
+      return c.getContext('2d', { willReadFrequently: true });
+    });
+
+    function readPixels(sctx, tiles) {
+      sctx.fillStyle = '#000';
+      sctx.fillRect(0, 0, WORLD_W, WORLD_H);
+      for (const t of tiles) {
+        if (t.img) sctx.drawImage(t.img, (t.x - TILE_X_MIN) * TILE_SZ, (t.y - TILE_Y_MIN) * TILE_SZ);
+      }
+      return sctx.getImageData(0, 0, WORLD_W, WORLD_H).data;
+    }
+
+    // 太陽高度の正弦 = rowA[y] + rowB[y] * colC[x] の形で、行・列ごとに前計算する
+    function sunTerms(utcMs) {
+      const d = new Date(utcMs);
+      const dayOfYear = (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(d.getUTCFullYear(), 0, 0)) / 86400000;
+      const decl = -23.44 * Math.PI / 180 * Math.cos(2 * Math.PI * (dayOfYear + 10) / 365);
+      const b = 2 * Math.PI * (dayOfYear - 81) / 364;
+      const eotMin = 9.87 * Math.sin(2 * b) - 7.53 * Math.cos(b) - 1.5 * Math.sin(b);
+      const utcHours = d.getUTCHours() + d.getUTCMinutes() / 60 + eotMin / 60;
+      const n = Math.pow(2, ZOOM);
+      const rowA = new Float32Array(WORLD_H), rowB = new Float32Array(WORLD_H), colC = new Float32Array(WORLD_W);
+      for (let y = 0; y < WORLD_H; y++) {
+        const yf = TILE_Y_MIN + (y + 0.5) / TILE_SZ;
+        const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * yf / n)));
+        rowA[y] = Math.sin(lat) * Math.sin(decl);
+        rowB[y] = Math.cos(lat) * Math.cos(decl);
+      }
+      for (let x = 0; x < WORLD_W; x++) {
+        const lon = (TILE_X_MIN + (x + 0.5) / TILE_SZ) / n * 360 - 180;
+        colC[x] = Math.cos(((utcHours - 12) * 15 + lon) * Math.PI / 180);
+      }
+      return { rowA, rowB, colC };
+    }
+
+    function composeMix(entry, irSet, visSet) {
+      const ir = readPixels(scratch[0], irSet.tiles);
+      const vis = readPixels(scratch[1], visSet.tiles);
+      const out = new ImageData(WORLD_W, WORLD_H);
+      const o = out.data;
+      const { rowA, rowB, colC } = sunTerms(parseUtc(entry.validtime));
+      const span = SUN_DAY - SUN_NIGHT;
+      for (let y = 0; y < WORLD_H; y++) {
+        for (let x = 0; x < WORLD_W; x++) {
+          const i = (y * WORLD_W + x) * 4;
+          const t = ir[i] / 255;
+          const v = (vis[i] + vis[i + 1] + vis[i + 2]) / 765;
+          // 昼夜の重み（0=夜: 赤外の白黒, 1=昼: 合成色）
+          let w = (rowA[y] + rowB[y] * colC[x] - SUN_NIGHT) / span;
+          w = w <= 0 ? 0 : w >= 1 ? 1 : w * w * (3 - 2 * w);
+          let ts = (t - MIX_IR_LOW) * MIX_IR_GAIN;
+          ts = ts <= 0 ? 0 : ts >= 1 ? 1 : ts;
+          // 昼の色: 低い雲（可視だけ明るい）はピンク、薄く高い雲（赤外だけ明るい）は青、両方明るい厚い雲は白
+          const greenDay = v * 0.55 + ts * 0.45;
+          const blueDay = ts > v * 0.6 ? ts : v * 0.6;
+          o[i] = (t + (v - t) * w) * 255;
+          o[i + 1] = (t + (greenDay - t) * w) * 255;
+          o[i + 2] = (t + (blueDay - t) * w) * 255;
+          o[i + 3] = 255;
+        }
+      }
+      const c = document.createElement('canvas');
+      c.width = WORLD_W; c.height = WORLD_H;
+      c.getContext('2d').putImageData(out, 0, 0);
+      return c;
+    }
+
+    async function prepareFrame(mode, entry) {
+      if (mode !== 'mix') { await loadTileSet(BANDS[mode], entry); return; }
+      if (mixCache.has(entry.validtime)) return;
+      const [irSet, visSet] = await Promise.all([loadTileSet(BANDS.ir, entry), loadTileSet(BANDS.vis, entry)]);
+      if (!mixCache.has(entry.validtime)) mixCache.set(entry.validtime, composeMix(entry, irSet, visSet));
+    }
+
+    // 最新のコマから順に読み込む。開いた直後に最新が見られるようにするため
+    function pump() {
+      const runId = ++state.runId;
+      const mode = state.mode;
+      const queue = state.list.slice().reverse();
+      const worker = async () => {
+        while (queue.length && runId === state.runId) {
+          const entry = queue.shift();
+          try { await prepareFrame(mode, entry); }
+          catch (e) { console.error('コマの読み込みに失敗', entry.validtime, e); }
+          if (runId !== state.runId) return;
+          updateProgress();
+          if (state.list[state.idx] === entry) draw();
+        }
+      };
+      updateProgress();
+      for (let i = 0; i < LOAD_CONCURRENCY; i++) worker();
+    }
+
+    function pruneCaches() {
+      const alive = new Set(state.list.map((e) => e.validtime));
+      for (const [key, set] of tileCache) {
+        const vt = key.slice(key.indexOf('|') + 1);
+        // 範囲外のコマと、一部のタイルが欠けたコマ（取り直す）を捨てる
+        if (!alive.has(vt) || (set.done && set.failed)) {
+          tileCache.delete(key);
+          if (set.done && set.failed) mixCache.delete(vt);
+        }
+      }
+      for (const vt of mixCache.keys()) if (!alive.has(vt)) mixCache.delete(vt);
+    }
+
+    async function fetchTimes() {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10000);
+      try {
+        const res = await fetch(TIMES_URL, { cache: 'no-store', signal: ctrl.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const all = await res.json();
+        const list = Array.isArray(all) ? all.filter((e) => e && /^\d{14}$/.test(e.basetime) && /^\d{14}$/.test(e.validtime)) : [];
+        if (!list.length) throw new Error('時刻リストが空です');
+        return list.slice(-FRAME_COUNT);
+      } finally { clearTimeout(timer); }
+    }
+
+    async function refresh() {
+      if (state.refreshing) return;
+      state.refreshing = true;
+      clearTimeout(state.retryTimer);
+      $('btnRefresh').disabled = true;
+      try {
+        const list = await fetchTimes();
+        const old = state.list;
+        const wasLatest = !old.length || state.idx === old.length - 1;
+        const currentVt = old.length ? old[state.idx].validtime : null;
+        state.list = list;
+        const same = list.findIndex((e) => e.validtime === currentVt);
+        state.idx = (wasLatest || same < 0) ? list.length - 1 : same;
+        state.lastOk = Date.now();
+        state.retryCount = 0;
+        pruneCaches();
+        buildTimeline();
+        draw();
+        pump();
+      } catch (e) {
+        // 失敗しても表示中の画像はそのまま残し、間隔を空けてやり直す
+        const reason = e.name === 'AbortError' ? 'タイムアウト' : e.message;
+        if (state.retryCount < RETRY_MAX) {
+          state.retryCount++;
+          setStatus(`更新に失敗しました（${reason}）。再試行します ${state.retryCount} / ${RETRY_MAX}`, true);
+          state.retryTimer = setTimeout(refresh, RETRY_BASE_MS * state.retryCount);
+        } else {
+          state.retryCount = 0;
+          setStatus(`更新に失敗しました（${reason}）。「更新」を押してください`, true);
+        }
+      } finally {
+        state.refreshing = false;
+        $('btnRefresh').disabled = false;
+      }
+    }
+
+    // ── 再生 ──
+    function stopPlay() {
+      state.playing = false;
+      clearTimeout(state.playTimer);
+      state.playTimer = null;
+      $('btnPlay').textContent = '▶ 再生';
+    }
+
+    function playStep() {
+      const n = state.list.length;
+      if (!state.playing || !n) return;
+      // 読み込み済みの次のコマへ進む（未読み込みは飛ばす）
+      for (let step = 1; step <= n; step++) {
+        const next = (state.idx + step) % n;
+        if (frameReady(state.mode, state.list[next])) { state.idx = next; break; }
+      }
+      draw();
+      // 最新のコマでは少し長く止める
+      const hold = state.idx === n - 1 ? state.speed * 3 : state.speed;
+      state.playTimer = setTimeout(playStep, hold);
     }
 
     function togglePlay() {
-      satPlaying = !satPlaying;
-      document.getElementById('btnPlay').textContent = satPlaying ? '⏸ 一時停止' : '▶ 再生';
-      if (satPlaying) startAnimation();
-      else { if (satInterval) { clearInterval(satInterval); satInterval = null; } }
+      if (state.playing) { stopPlay(); return; }
+      state.playing = true;
+      $('btnPlay').textContent = '⏸ 一時停止';
+      state.playTimer = setTimeout(playStep, state.speed);
     }
 
-    function changeSpeed() {
-      satSpeed = parseInt(document.getElementById('speedSelect').value);
-      if (satPlaying) startAnimation();
+    // ── 操作 ──
+    function setMode(mode) {
+      if (mode === state.mode) return;
+      state.mode = mode;
+      document.querySelectorAll('.seg button').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+      $('legend').classList.toggle('show', mode === 'mix');
+      draw();
+      pump();
     }
 
-    // Timeline click-to-seek
-    document.addEventListener('DOMContentLoaded', () => {
-      const meter = document.getElementById('timelineMeter');
-      let dragging = false;
+    function eventToView(e) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: (e.clientX - rect.left) * VIEW_W / rect.width, y: (e.clientY - rect.top) * VIEW_H / rect.height };
+    }
 
-      function seekTo(e) {
-        if (!satFrames.length) return;
-        const rect = meter.getBoundingClientRect();
-        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        satFrameIdx = Math.round(pct * (satFrames.length - 1));
-        drawFrame();
-      }
+    function zoomAt(point, nextScale) {
+      const old = view.s;
+      const s = Math.max(1, Math.min(MAX_SCALE, nextScale));
+      if (s === old) return;
+      view.ox = point.x - (point.x - view.ox) * s / old;
+      view.oy = point.y - (point.y - view.oy) * s / old;
+      view.s = s;
+      clampView();
+      draw();
+    }
 
-      meter.addEventListener('mousedown', (e) => { dragging = true; seekTo(e); });
-      meter.addEventListener('touchstart', (e) => { dragging = true; seekTo(e.touches[0]); }, { passive: true });
-      window.addEventListener('mousemove', (e) => { if (dragging) seekTo(e); });
-      function onTimelineTouchMove(e) {
-        if (!dragging) return;
-        e.preventDefault();
-        if (e.touches[0]) seekTo(e.touches[0]);
-      }
-      window.addEventListener('touchmove', onTimelineTouchMove, { passive: false });
-      window.addEventListener('mouseup', () => { dragging = false; });
-      window.addEventListener('touchend', () => { dragging = false; });
-      window.addEventListener('touchcancel', () => { dragging = false; });
-
-      const mapWrap = document.querySelector('.sat-canvas-wrap');
+    function setupMapGestures() {
+      const wrap = $('satWrap');
       const pointers = new Map();
-      let lastPanPoint = null;
-      let lastPinchDistance = 0;
+      let lastPan = null, lastPinch = 0;
+      const pts = () => Array.from(pointers.values());
+      const pinchDist = () => { const p = pts(); return p.length < 2 ? 0 : Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); };
+      const pinchCenter = () => { const p = pts(); return { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 }; };
 
-      function pointerDistance() {
-        const pts = Array.from(pointers.values());
-        if (pts.length < 2) return 0;
-        return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      }
-
-      function pointerCenter() {
-        const pts = Array.from(pointers.values());
-        return {
-          x: (pts[0].x + pts[1].x) / 2,
-          y: (pts[0].y + pts[1].y) / 2,
-        };
-      }
-
-      mapWrap.addEventListener('wheel', (e) => {
+      wrap.addEventListener('wheel', (e) => {
         e.preventDefault();
-        const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-        zoomMapAt(canvasPointFromEvent(e), mapView.scale * zoomFactor);
+        zoomAt(eventToView(e), view.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
       }, { passive: false });
 
-      mapWrap.addEventListener('pointerdown', (e) => {
+      wrap.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
-        pointers.set(e.pointerId, canvasPointFromEvent(e));
-        mapWrap.setPointerCapture(e.pointerId);
-        mapWrap.classList.add('dragging');
-        lastPanPoint = pointers.size === 1 ? canvasPointFromEvent(e) : null;
-        lastPinchDistance = pointers.size === 2 ? pointerDistance() : 0;
+        e.preventDefault();
+        pointers.set(e.pointerId, eventToView(e));
+        wrap.setPointerCapture(e.pointerId);
+        wrap.classList.add('dragging');
+        lastPan = pointers.size === 1 ? eventToView(e) : null;
+        lastPinch = pointers.size === 2 ? pinchDist() : 0;
       });
 
-      mapWrap.addEventListener('pointermove', (e) => {
+      wrap.addEventListener('pointermove', (e) => {
         if (!pointers.has(e.pointerId)) return;
-        const point = canvasPointFromEvent(e);
-        pointers.set(e.pointerId, point);
-
+        const p = eventToView(e);
+        pointers.set(e.pointerId, p);
         if (pointers.size === 2) {
-          const distance = pointerDistance();
-          if (lastPinchDistance > 0) {
-            zoomMapAt(pointerCenter(), mapView.scale * distance / lastPinchDistance);
-          }
-          lastPinchDistance = distance;
-          lastPanPoint = null;
+          const d = pinchDist();
+          if (lastPinch > 0) zoomAt(pinchCenter(), view.s * d / lastPinch);
+          lastPinch = d;
+          lastPan = null;
           return;
         }
-
-        if (lastPanPoint) {
-          panMapBy(point.x - lastPanPoint.x, point.y - lastPanPoint.y);
+        if (lastPan) {
+          view.ox += p.x - lastPan.x;
+          view.oy += p.y - lastPan.y;
+          clampView();
+          draw();
         }
-        lastPanPoint = point;
+        lastPan = p;
       });
 
-      function endPointer(e) {
+      const end = (e) => {
         pointers.delete(e.pointerId);
-        lastPinchDistance = pointers.size === 2 ? pointerDistance() : 0;
-        lastPanPoint = pointers.size === 1 ? Array.from(pointers.values())[0] : null;
-        if (pointers.size === 0) mapWrap.classList.remove('dragging');
+        lastPinch = pointers.size === 2 ? pinchDist() : 0;
+        lastPan = pointers.size === 1 ? pts()[0] : null;
+        if (!pointers.size) wrap.classList.remove('dragging');
+      };
+      wrap.addEventListener('pointerup', end);
+      wrap.addEventListener('pointercancel', end);
+      wrap.addEventListener('dragstart', (e) => e.preventDefault());
+    }
+
+    function setupMeter() {
+      const meter = $('meter');
+      let dragging = false;
+      const seek = (e) => {
+        const n = state.list.length;
+        if (!n) return;
+        const rect = meter.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const idx = Math.round(pct * (n - 1));
+        if (idx !== state.idx) { state.idx = idx; draw(); }
+      };
+      meter.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        // 既定動作（文字の選択やドラッグ＆ドロップ）が始まると操作が打ち切られるので止める
+        e.preventDefault();
+        dragging = true;
+        meter.setPointerCapture(e.pointerId);
+        if (state.playing) stopPlay();
+        seek(e);
+      });
+      meter.addEventListener('pointermove', (e) => { if (dragging) seek(e); });
+      const end = () => { dragging = false; };
+      meter.addEventListener('pointerup', end);
+      meter.addEventListener('pointercancel', end);
+      meter.addEventListener('dragstart', (e) => e.preventDefault());
+    }
+
+    function locate() {
+      if (!navigator.geolocation || !window.isSecureContext) {
+        setStatus('このページの開き方では現在地を取得できません（HTTPS または localhost で開く必要があります）', true);
+        return;
       }
-
-      mapWrap.addEventListener('pointerup', endPointer);
-      mapWrap.addEventListener('pointercancel', endPointer);
-    });
-
-    // Auto refresh
-    setInterval(() => { loadSatelliteAnimation(); }, 10 * 60 * 1000);
-
-    // ── Geolocation ──
-    function geolocate() {
-      if (!navigator.geolocation) return;
-      const btn = document.querySelector('.btn-sub');
-      btn.disabled = true; btn.textContent = '⏳';
+      const btn = $('btnLocate');
+      btn.disabled = true;
       navigator.geolocation.getCurrentPosition(
-        p => { document.getElementById('inLat').value = p.coords.latitude.toFixed(4); document.getElementById('inLon').value = p.coords.longitude.toFixed(4); btn.disabled = false; btn.innerHTML = '📍 現在地'; runAll(); },
-        () => { btn.disabled = false; btn.innerHTML = '📍 現在地'; showErr('位置情報を取得できません'); },
+        (p) => {
+          btn.disabled = false;
+          state.loc = { lat: p.coords.latitude, lon: p.coords.longitude };
+          const saved = saveLocation(state.loc);
+          homeView();
+          draw();
+          setStatus(saved ? '現在地を登録しました（次回からこの地点を表示します）' : '現在地を表示しました（このブラウザでは保存できませんでした）', !saved);
+        },
+        () => {
+          // 失敗時は登録済みの地点をそのまま使う
+          btn.disabled = false;
+          setStatus('現在地を取得できませんでした。登録済みの地点のまま表示します', true);
+        },
         { timeout: 10000 }
       );
     }
-    function showErr(m) { document.getElementById('errText').textContent = m; document.getElementById('err').classList.add('show'); }
-    function hideErr() { document.getElementById('err').classList.remove('show'); }
-    function showLoad(on) { document.getElementById('loader').classList.toggle('hidden', !on); }
-    showLoad(false);
 
-    // ── Main ──
-    function fetchWithTimeout(url, timeoutMs = 10000) {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-      return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
+    function resetLocation() {
+      try { localStorage.removeItem(LOC_KEY); } catch (e) { /* 保存領域が使えなくても表示は戻す */ }
+      state.loc = { ...DEFAULT_LOC };
+      homeView();
+      draw();
+      setStatus('初期位置に戻しました');
     }
 
-    async function runAll() {
-      const lat = parseFloat(document.getElementById('inLat').value);
-      const lon = parseFloat(document.getElementById('inLon').value);
-      if (isNaN(lat) || isNaN(lon)) { showErr('緯度と経度を入力してください'); return; }
-      hideErr(); showLoad(true);
+    // ── 初期化 ──
+    function init() {
+      setupMapGestures();
+      setupMeter();
+      $('btnPlay').addEventListener('click', togglePlay);
+      $('speedSelect').addEventListener('change', (e) => { state.speed = parseInt(e.target.value, 10) || 400; });
+      document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+      $('btnRefresh').addEventListener('click', () => { state.retryCount = 0; refresh(); });
+      $('btnLocate').addEventListener('click', locate);
+      $('btnResetView').addEventListener('click', () => { homeView(); draw(); });
+      $('btnResetLoc').addEventListener('click', resetLocation);
 
-      // Always show result container and load satellite (independent of API)
-      document.getElementById('result').style.display = '';
-      geocode(lat, lon);
-      loadSatelliteAnimation();
+      homeView();
+      new ResizeObserver(resizeCanvas).observe($('satWrap'));
+      resizeCanvas();
 
-      // Try forecast API separately — if it fails, satellite still works
-      try {
-        const params = new URLSearchParams({
-          latitude: lat.toFixed(4), longitude: lon.toFixed(4),
-          hourly: 'sunshine_duration,direct_radiation,temperature_2m,relative_humidity_2m,dew_point_2m,is_day,relative_humidity_925hPa',
-          timezone: 'Asia/Tokyo', forecast_days: '2',
-        });
-        const res = await fetchWithTimeout(`https://api.open-meteo.com/v1/forecast?${params}`);
-        if (!res.ok) throw new Error(`API ${res.status}`);
-        const data = await res.json();
-        analyze(data);
-      } catch(e) {
-        // Show warning but don't block satellite view
-        showErr('予報データ取得失敗（衛星画像は表示中）: ' + (e.name === 'AbortError' ? 'タイムアウト' : e.message));
-        // Hide forecast-only UI
-        document.getElementById('verdictBox').style.display = 'none';
-        document.getElementById('riskGrid').style.display = 'none';
-        document.querySelector('.strip-section').style.display = 'none';
-      }
-      finally { showLoad(false); }
+      // スリープ復帰・画面に戻ったとき・回線が戻ったときに取り直す
+      const stale = (ms) => Date.now() - state.lastOk > ms;
+      document.addEventListener('visibilitychange', () => { if (!document.hidden && stale(WAKE_REFRESH_MS)) refresh(); });
+      window.addEventListener('online', () => refresh());
+      setInterval(() => {
+        if (!document.hidden && stale(AUTO_REFRESH_MS)) refresh();
+        else if (state.list.length) updateTimeUi();   // 「○分前」の表示を進める
+      }, 60 * 1000);
+
+      loadCoast();
+      refresh();
     }
 
-    async function geocode(lat, lon) {
-      const el = document.getElementById('locName');
-      try {
-        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ja`);
-        const d = await r.json(); const a = d.address;
-        const n = [a.city||a.town||a.village||'', a.state||a.province||''].filter(Boolean).join(', ');
-        el.innerHTML = `<span class="name">📍 ${n||d.display_name}</span>`;
-      } catch { el.innerHTML = ''; }
-      el.style.display = '';
-    }
-
-    function analyze(apiData) {
-      const h = apiData.hourly;
-      const now = new Date();
-      const nowHour = now.getHours();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-      let startIdx = -1;
-      for (let i = 0; i < h.time.length; i++) {
-        if (h.time[i] === `${todayStr}T${String(nowHour).padStart(2,'0')}:00`) { startIdx = i; break; }
-      }
-      if (startIdx < 0) { showErr('データが見つかりません'); return; }
-
-      const hours = [];
-      for (let i = 0; i < 4 && (startIdx + i) < h.time.length; i++) {
-        const idx = startIdx + i;
-        const sunDur = h.sunshine_duration[idx] || 0;
-        hours.push({
-          hour: parseInt(h.time[idx].slice(11,13), 10),
-          sunshine_pct: Math.round((sunDur / 3600) * 100),
-          direct_rad: h.direct_radiation[idx] || 0,
-          temp: h.temperature_2m[idx],
-          rh: h.relative_humidity_2m[idx],
-          dewpoint: h.dew_point_2m[idx],
-          is_day: h.is_day[idx],
-          rh_925: h.relative_humidity_925hPa[idx],
-        });
-      }
-
-      const current = hours[0], future = hours.slice(1);
-      const maxRH925 = Math.max(...hours.map(h => h.rh_925));
-      const minSpread = Math.min(...hours.map(h => h.temp - h.dewpoint));
-      const sunMin = Math.min(...hours.map(h => h.sunshine_pct));
-      const rh925Rising = future.length > 0 && Math.max(...future.map(h => h.rh_925)) > current.rh_925 + 10;
-      const sunDropping = future.length > 0 && future[future.length - 1].sunshine_pct < current.sunshine_pct - 20;
-
-      let riskScore = 0;
-      if (maxRH925 > 85) riskScore += 35; else if (maxRH925 > 70) riskScore += 20; else if (maxRH925 > 55) riskScore += 8;
-      if (minSpread < 2) riskScore += 30; else if (minSpread < 5) riskScore += 15; else if (minSpread < 8) riskScore += 5;
-      if (sunMin < 30) riskScore += 25; else if (sunMin < 60) riskScore += 12; else if (sunMin < 80) riskScore += 5;
-      if (sunDropping) riskScore += 10;
-      if (rh925Rising) riskScore += 10;
-
-      const allNight = hours.every(h => !h.is_day);
-      let verdict, vIcon, vText, vSub;
-      if (allNight) { verdict='caution';vIcon='🌙';vText='夜間のため判定不可';vSub='日中に再度ご確認ください'; }
-      else if (riskScore<=20) { verdict='go';vIcon='☀️';vText='GO！快晴キープ';vSub='3時間後も晴れが続く見込み。衛星画像も確認を。'; }
-      else if (riskScore<=45) { verdict='caution';vIcon='⛅';vText='注意 — 曇りリスクあり';vSub='衛星画像で雲の接近を確認してください。'; }
-      else { verdict='nogo';vIcon='☁️';vText='STOP — 曇りの可能性大';vSub='出発は見送り推奨。衛星画像でも確認を。'; }
-
-      const vbox = document.getElementById('verdictBox');
-      vbox.className = `verdict-box fade-in d1 ${verdict}`;
-      document.getElementById('verdictIcon').textContent = vIcon;
-      document.getElementById('verdictText').textContent = vText;
-      document.getElementById('verdictSub').textContent = vSub;
-      document.getElementById('verdictTime').textContent = `判定: ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')} | リスクスコア ${riskScore}/100`;
-
-      const rh925Cls=maxRH925>80?'risk-danger':maxRH925>65?'risk-warn':'risk-safe';
-      const spCls=minSpread<3?'risk-danger':minSpread<6?'risk-warn':'risk-safe';
-      const snCls=sunMin>=80?'risk-safe':sunMin>=50?'risk-warn':'risk-danger';
-      const maxRH=Math.max(...hours.map(h=>h.rh));
-      document.getElementById('riskGrid').innerHTML = `
-        <div class="risk-card ${rh925Cls}"><div class="r-title">🏔️ 上空湿度 (925hPa)</div><div class="r-value">${Math.round(maxRH925)}%</div><div class="r-detail">${maxRH925>80?'雲が出やすい':maxRH925>65?'やや湿り気味':'乾燥 — 安全'}</div><div class="r-bar"><div class="r-bar-fill" style="width:${Math.min(maxRH925,100)}%;background:${maxRH925>80?'var(--red)':maxRH925>65?'var(--sun)':'var(--green)'}"></div></div></div>
-        <div class="risk-card ${spCls}"><div class="r-title">🌡️ 気温−露点差</div><div class="r-value">${minSpread.toFixed(1)}°C</div><div class="r-detail">${minSpread<3?'霧/雲の危険':minSpread<6?'注意が必要':'十分な差 — 安全'}</div><div class="r-bar"><div class="r-bar-fill" style="width:${Math.max(0,Math.min(100,100-(minSpread/15)*100))}%;background:${minSpread<3?'var(--red)':minSpread<6?'var(--sun)':'var(--green)'}"></div></div></div>
-        <div class="risk-card ${snCls}"><div class="r-title">☀️ 最低日照率</div><div class="r-value">${sunMin}%</div><div class="r-detail">${sunMin>=80?'日照十分':sunMin>=50?'雲増加の兆候':'日照減少予報'}</div><div class="r-bar"><div class="r-bar-fill" style="width:${Math.max(0,100-sunMin)}%;background:${sunMin>=80?'var(--green)':sunMin>=50?'var(--sun)':'var(--red)'}"></div></div></div>
-        <div class="risk-card ${maxRH>80?'risk-danger':maxRH>65?'risk-warn':'risk-safe'}"><div class="r-title">💧 地表湿度</div><div class="r-value">${Math.round(maxRH)}%</div><div class="r-detail">気温${current.temp}°C / 露点${current.dewpoint}°C</div><div class="r-bar"><div class="r-bar-fill" style="width:${maxRH}%;background:${maxRH>80?'var(--red)':maxRH>65?'var(--sun)':'var(--green)'}"></div></div></div>
-      `;
-
-      document.getElementById('hourStrip').innerHTML = hours.map((h, i) => {
-        const icon = !h.is_day?'🌙':h.sunshine_pct>=80?'☀️':h.sunshine_pct>=50?'🌤️':h.sunshine_pct>0?'⛅':'☁️';
-        const cls = h.sunshine_pct>=80?'safe':h.sunshine_pct>=50?'warn':'bad';
-        return `<div class="hour-cell ${cls}${i===0?' now':''}"><div class="h-time">${i===0?'現在':`+${i}h`} (${h.hour}時)</div><div class="h-icon">${icon}</div><div class="h-sun">日照 ${h.sunshine_pct}%</div><div class="h-detail">日射 ${Math.round(h.direct_rad)}W/m²<br>湿度 ${h.rh}%/上空${h.rh_925}%<br>露点差 ${(h.temp-h.dewpoint).toFixed(1)}°C</div></div>`;
-      }).join('');
-    }
-
-    // Init
-    document.getElementById('inLat').value = '34.9869';
-    document.getElementById('inLon').value = '135.6867';
-    runAll();
+    init();
   </script>
 </body>
 </html>
